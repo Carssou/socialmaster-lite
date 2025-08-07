@@ -120,7 +120,7 @@ export class AIInsightsService {
       logger.info('No recent AI insights found, generating new ones...');
 
       // Get recent account metrics for trend analysis
-      const accountMetrics = await apifyService.getRecentAccountMetrics(
+      const accountMetrics = await apifyService.instance.getRecentAccountMetrics(
         socialAccountId,
         30,
       );
@@ -129,7 +129,7 @@ export class AIInsightsService {
       }
 
       // Get recent post metrics
-      const postMetrics = await apifyService.getRecentPostMetrics(
+      const postMetrics = await apifyService.instance.getRecentPostMetrics(
         socialAccountId,
         50,
       );

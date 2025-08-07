@@ -474,4 +474,14 @@ export class ApifyService {
   }
 }
 
-export default new ApifyService();
+// Lazy initialization to ensure environment variables are loaded
+let apifyServiceInstance: ApifyService | null = null;
+
+export default {
+  get instance(): ApifyService {
+    if (!apifyServiceInstance) {
+      apifyServiceInstance = new ApifyService();
+    }
+    return apifyServiceInstance;
+  }
+};
