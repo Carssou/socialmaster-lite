@@ -10,7 +10,6 @@ declare global {
     interface Request {
       user?: {
         id: string;
-        teamId?: string;
         email?: string;
         name?: string;
       };
@@ -38,12 +37,12 @@ export const authenticate = async (
     // Verify token
     const decoded = verifyToken(token);
 
-    // Get user information from database including team - use client connection
+    // Get user information from database - use client connection
     const client = await pgPool.connect();
     let userResult;
     try {
       userResult = await client.query(
-        'SELECT id, email, name, team_id FROM users WHERE id = $1 AND is_active = true',
+        'SELECT id, email, name FROM users WHERE id = $1 AND is_active = true',
         [decoded.userId]
       );
     } finally {
@@ -61,7 +60,6 @@ export const authenticate = async (
       id: user.id,
       email: user.email,
       name: user.name,
-      teamId: user.team_id,
     };
 
     next();
@@ -87,12 +85,12 @@ export const optionalAuthenticate = async (
       // Verify token
       const decoded = verifyToken(token);
 
-      // Get user information from database including team - use client connection
+      // Get user information from database - use client connection
       const client = await pgPool.connect();
       let userResult;
       try {
         userResult = await client.query(
-          'SELECT id, email, name, team_id FROM users WHERE id = $1 AND is_active = true',
+          'SELECT id, email, name FROM users WHERE id = $1 AND is_active = true',
           [decoded.userId]
         );
       } finally {
@@ -107,7 +105,6 @@ export const optionalAuthenticate = async (
           id: user.id,
           email: user.email,
           name: user.name,
-          teamId: user.team_id,
         };
       }
     }

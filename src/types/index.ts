@@ -131,7 +131,6 @@ export interface SocialAccount extends BaseModel {
   accessToken: string;
   refreshToken?: string;
   tokenExpiresAt?: Date;
-  permissions?: string[];
   isActive: boolean;
   lastSyncAt?: Date;
 }
@@ -145,7 +144,6 @@ export interface SocialAccountDto {
   accessToken: string;
   refreshToken?: string;
   tokenExpiresAt?: Date;
-  permissions?: string[];
 }
 
 // Account usage summary

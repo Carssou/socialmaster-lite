@@ -14,7 +14,6 @@ interface SocialAccountDB {
   access_token: string;
   refresh_token?: string;
   token_expires_at?: Date;
-  permissions?: string[];
   is_active: boolean;
   last_sync_at?: Date;
   created_at: Date;
@@ -30,7 +29,6 @@ interface CreateSocialAccountDto {
   access_token: string;
   refresh_token?: string;
   token_expires_at?: Date;
-  permissions?: string[];
 }
 
 /**
@@ -82,7 +80,6 @@ export class SocialAccountService {
       access_token: accountData.access_token,
       refresh_token: accountData.refresh_token,
       token_expires_at: accountData.token_expires_at,
-      permissions: accountData.permissions,
       is_active: true,
     });
 
