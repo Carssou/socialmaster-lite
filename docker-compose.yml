@@ -17,6 +17,11 @@ services:
       - REDIS_PORT=6379
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=dev-jwt-secret-change-in-production
+      - JWT_REFRESH_SECRET=dev-refresh-secret-change-in-production
+      - JWT_EXPIRES_IN=24h
+      - JWT_REFRESH_EXPIRES_IN=7d
+      - APIFY_API_TOKEN=${APIFY_API_TOKEN:-}
+      - APIFY_INSTAGRAM_ACTOR=${APIFY_INSTAGRAM_ACTOR:-}
       - LOG_LEVEL=debug
     depends_on:
       postgres:

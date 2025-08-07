@@ -48,7 +48,6 @@ import {
   createPerformanceIndexes,
   analyzeDatabase,
 } from './database-optimization';
-import { setupDatabaseMonitoring } from '../services/monitoring/database-monitor';
 
 // Initialize connections
 export const initializeDatabase = async () => {
@@ -76,9 +75,6 @@ export const initializeDatabase = async () => {
 
     // Release the client
     client.release();
-
-    // Setup database monitoring
-    setupDatabaseMonitoring(pgPool);
 
     // Log pool statistics
     const poolStats = await getPoolStats();

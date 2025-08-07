@@ -1,8 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
-import { verifyToken, extractTokenFromHeader } from '../utils/jwt';
-import { ApiError } from '../utils/errors';
-import { logger } from '../config/logger';
-import { pgPool } from '../config/database';
+import { Request, Response, NextFunction } from "express";
+import { verifyToken, extractTokenFromHeader } from "../utils/jwt";
+import { ApiError } from "../utils/errors";
+import { logger } from "../logger";
+import { pgPool } from "../database";
 
 // Extend Express Request type to include user property
 declare global {
@@ -24,14 +24,14 @@ declare global {
 export const authenticate = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     // Get token from authorization header
     const token = extractTokenFromHeader(req.headers.authorization);
 
     if (!token) {
-      throw new ApiError('Authentication required', 401);
+      throw new ApiError("Authentication required", 401);
     }
 
     // Verify token
@@ -42,15 +42,15 @@ export const authenticate = async (
     let userResult;
     try {
       userResult = await client.query(
-        'SELECT id, email, name FROM users WHERE id = $1 AND is_active = true',
-        [decoded.userId]
+        "SELECT id, email, name FROM users WHERE id = $1 AND is_active = true",
+        [decoded.userId],
       );
     } finally {
       client.release();
     }
 
     if (userResult.rows.length === 0) {
-      throw new ApiError('User not found or inactive', 401);
+      throw new ApiError("User not found or inactive", 401);
     }
 
     const user = userResult.rows[0];
@@ -75,7 +75,7 @@ export const authenticate = async (
 export const optionalAuthenticate = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     // Get token from authorization header
@@ -90,8 +90,8 @@ export const optionalAuthenticate = async (
       let userResult;
       try {
         userResult = await client.query(
-          'SELECT id, email, name FROM users WHERE id = $1 AND is_active = true',
-          [decoded.userId]
+          "SELECT id, email, name FROM users WHERE id = $1 AND is_active = true",
+          [decoded.userId],
         );
       } finally {
         client.release();
@@ -112,7 +112,7 @@ export const optionalAuthenticate = async (
     next();
   } catch (error) {
     // Continue without authentication
-    logger.debug('Optional authentication failed', { error });
+    logger.debug("Optional authentication failed", { error });
     next();
   }
 };

@@ -1,5 +1,5 @@
 // Simplified models for Social Master Lite
-import * as Types from './index';
+import * as Types from "./index";
 
 // User models
 export interface User extends Types.User {}

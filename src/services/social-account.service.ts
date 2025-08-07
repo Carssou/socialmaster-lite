@@ -1,7 +1,7 @@
-import { Repository } from '../database/repository';
-import { ApiError } from '../utils/errors';
-import { logger } from '../logger';
-import tierService from './tier.service';
+import { Repository } from "../database/repository";
+import { ApiError } from "../utils/errors";
+import { logger } from "../logger";
+import tierService from "./tier.service";
 
 // Interface matching the database structure
 interface SocialAccountDB {
@@ -38,36 +38,42 @@ export class SocialAccountService {
   private repository: Repository<SocialAccountDB>;
 
   constructor() {
-    this.repository = new Repository<SocialAccountDB>('social_accounts');
+    this.repository = new Repository<SocialAccountDB>("social_accounts");
   }
 
   /**
    * Create a new social media account
    * Enforces tier-based account limits
    */
-  async createAccount(userId: string, accountData: CreateSocialAccountDto): Promise<SocialAccountDB> {
+  async createAccount(
+    userId: string,
+    accountData: CreateSocialAccountDto,
+  ): Promise<SocialAccountDB> {
     // Check current account count
-    const currentCount = await this.repository.count({ user_id: userId, is_active: true });
-    
+    const currentCount = await this.repository.count({
+      user_id: userId,
+      is_active: true,
+    });
+
     // Check if user can add another account based on their tier
     const canAdd = await tierService.canAddAccount(userId, currentCount);
-    
+
     if (!canAdd) {
       const maxAccounts = await tierService.getMaxAccountsForUser(userId);
       throw new ApiError(
         `Account limit reached. Your current plan allows ${maxAccounts} account(s). You currently have ${currentCount} active account(s).`,
-        403
+        403,
       );
     }
 
     // Check for duplicate accounts
     const existingAccounts = await this.repository.executeQuery(
-      'SELECT id FROM social_accounts WHERE user_id = $1 AND platform = $2 AND platform_account_id = $3',
-      [userId, accountData.platform, accountData.platform_account_id]
+      "SELECT id FROM social_accounts WHERE user_id = $1 AND platform = $2 AND platform_account_id = $3",
+      [userId, accountData.platform, accountData.platform_account_id],
     );
 
     if (existingAccounts.length > 0) {
-      throw new ApiError('Account already connected', 409);
+      throw new ApiError("Account already connected", 409);
     }
 
     // Create the account
@@ -76,14 +82,16 @@ export class SocialAccountService {
       platform: accountData.platform,
       platform_account_id: accountData.platform_account_id,
       username: accountData.username,
-      display_name: accountData.display_name,
+      display_name: accountData.display_name || "",
       access_token: accountData.access_token,
-      refresh_token: accountData.refresh_token,
-      token_expires_at: accountData.token_expires_at,
+      refresh_token: accountData.refresh_token || "",
+      token_expires_at: accountData.token_expires_at || new Date(),
       is_active: true,
     });
 
-    logger.info(`Social account created for user ${userId}: ${accountData.platform}/${accountData.username}`);
+    logger.info(
+      `Social account created for user ${userId}: ${accountData.platform}/${accountData.username}`,
+    );
 
     return newAccount;
   }
@@ -92,7 +100,7 @@ export class SocialAccountService {
    * Get all social accounts for a user
    */
   async getUserAccounts(userId: string): Promise<SocialAccountDB[]> {
-    return this.repository.findByField('user_id', userId);
+    return this.repository.findByField("user_id", userId);
   }
 
   /**
@@ -100,23 +108,26 @@ export class SocialAccountService {
    */
   async getActiveUserAccounts(userId: string): Promise<SocialAccountDB[]> {
     return this.repository.executeQuery(
-      'SELECT * FROM social_accounts WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC',
-      [userId]
+      "SELECT * FROM social_accounts WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC",
+      [userId],
     );
   }
 
   /**
    * Get a specific social account
    */
-  async getAccount(accountId: string, userId: string): Promise<SocialAccountDB> {
+  async getAccount(
+    accountId: string,
+    userId: string,
+  ): Promise<SocialAccountDB> {
     const account = await this.repository.findById(accountId);
-    
+
     if (!account) {
-      throw new ApiError('Account not found', 404);
+      throw new ApiError("Account not found", 404);
     }
 
     if (account.user_id !== userId) {
-      throw new ApiError('Access denied', 403);
+      throw new ApiError("Access denied", 403);
     }
 
     return account;
@@ -125,14 +136,18 @@ export class SocialAccountService {
   /**
    * Update social account
    */
-  async updateAccount(accountId: string, userId: string, updates: Partial<CreateSocialAccountDto>): Promise<SocialAccountDB> {
+  async updateAccount(
+    accountId: string,
+    userId: string,
+    updates: Partial<CreateSocialAccountDto>,
+  ): Promise<SocialAccountDB> {
     // Verify ownership
     await this.getAccount(accountId, userId);
 
     const updatedAccount = await this.repository.update(accountId, updates);
-    
+
     if (!updatedAccount) {
-      throw new ApiError('Failed to update account', 500);
+      throw new ApiError("Failed to update account", 500);
     }
 
     logger.info(`Social account updated: ${accountId}`);
@@ -147,10 +162,12 @@ export class SocialAccountService {
     // Verify ownership
     await this.getAccount(accountId, userId);
 
-    const updated = await this.repository.update(accountId, { is_active: false });
-    
+    const updated = await this.repository.update(accountId, {
+      is_active: false,
+    });
+
     if (!updated) {
-      throw new ApiError('Failed to deactivate account', 500);
+      throw new ApiError("Failed to deactivate account", 500);
     }
 
     logger.info(`Social account deactivated: ${accountId}`);
@@ -165,18 +182,21 @@ export class SocialAccountService {
     tier: string;
     can_add_more: boolean;
   }> {
-    const currentCount = await this.repository.count({ user_id: userId, is_active: true });
+    const currentCount = await this.repository.count({
+      user_id: userId,
+      is_active: true,
+    });
     const maxAccounts = await tierService.getMaxAccountsForUser(userId);
     const canAdd = await tierService.canAddAccount(userId, currentCount);
-    
+
     // Get user's tier
-    const userRepository = new Repository<any>('users');
+    const userRepository = new Repository<any>("users");
     const user = await userRepository.findById(userId);
 
     return {
       current_accounts: currentCount,
       max_accounts: maxAccounts,
-      tier: user?.tier || 'free',
+      tier: user?.tier || "free",
       can_add_more: canAdd,
     };
   }

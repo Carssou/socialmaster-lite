@@ -8,14 +8,14 @@ const envSchema = z.object({
   PORT: z
     .string()
     .transform(Number)
-    .default(() => 3000),
+    .default('3000'),
 
   // Database
   DB_HOST: z.string().default('localhost'),
   DB_PORT: z
     .string()
     .transform(Number)
-    .default(() => 5432),
+    .default('5432'),
   DB_NAME: z.string().default('social_media_manager'),
   DB_USER: z.string().default('postgres'),
   DB_PASSWORD: z.string().default('password'),
@@ -23,15 +23,15 @@ const envSchema = z.object({
   DB_POOL_MIN: z
     .string()
     .transform(Number)
-    .default(() => 2),
+    .default('2'),
   DB_POOL_MAX: z
     .string()
     .transform(Number)
-    .default(() => 10),
+    .default('10'),
   DB_STATEMENT_TIMEOUT: z
     .string()
     .transform(Number)
-    .default(() => 10000),
+    .default('10000'),
 
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),

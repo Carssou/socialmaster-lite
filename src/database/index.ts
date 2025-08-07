@@ -1,7 +1,6 @@
 // Database utilities and helpers
-import { Pool, QueryResult } from 'pg';
-import { pgPool } from '../config/database';
-import { logger } from '../config/logger';
+import { QueryResult } from "pg";
+import { pgPool } from "../database";
 
 /**
  * Execute a database query with logging and error handling
@@ -11,12 +10,12 @@ import { logger } from '../config/logger';
  */
 export const query = async <T>(
   text: string,
-  params: any[] = []
+  params: any[] = [],
 ): Promise<T[]> => {
   // SIMPLIFIED VERSION - Just pass through to pgPool without logging
   const result: QueryResult = await pgPool.query(text, params);
   return result.rows as T[];
-  
+
   /* ORIGINAL CODE - COMMENTED OUT DUE TO HANGING:
   const start = Date.now();
   try {
@@ -47,16 +46,16 @@ export const query = async <T>(
  * @returns Result of the callback function
  */
 export const transaction = async <T>(
-  callback: (client: any) => Promise<T>
+  callback: (client: any) => Promise<T>,
 ): Promise<T> => {
   const client = await pgPool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
     const result = await callback(client);
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
@@ -69,9 +68,9 @@ export const transaction = async <T>(
  * @returns Array of query results
  */
 export const batchQuery = async <T>(
-  queries: { text: string; params?: any[] }[]
+  queries: { text: string; params?: any[] }[],
 ): Promise<T[][]> => {
-  return transaction(async client => {
+  return transaction(async (client) => {
     const results: T[][] = [];
     for (const query of queries) {
       const result = await client.query(query.text, query.params || []);
@@ -89,15 +88,15 @@ export const batchQuery = async <T>(
  */
 export const createInClause = (
   values: any[],
-  startIndex = 1
+  startIndex = 1,
 ): { text: string; values: any[] } => {
   if (!values.length) {
-    return { text: '(NULL)', values: [] };
+    return { text: "(NULL)", values: [] };
   }
 
   const params = values.map((_, i) => `$${startIndex + i}`);
   return {
-    text: `(${params.join(', ')})`,
+    text: `(${params.join(", ")})`,
     values,
   };
 };
@@ -110,7 +109,7 @@ export const createInClause = (
  */
 export const buildWhereClause = (
   filters: Record<string, any>,
-  startIndex = 1
+  startIndex = 1,
 ): { text: string; values: any[] } => {
   const clauses: string[] = [];
   const values: any[] = [];
@@ -134,7 +133,7 @@ export const buildWhereClause = (
   });
 
   return {
-    text: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
+    text: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "",
     values,
   };
 };
@@ -149,7 +148,7 @@ export const buildWhereClause = (
 export const buildPaginationClause = (
   page: number,
   limit: number,
-  startIndex = 1
+  startIndex = 1,
 ): { text: string; values: any[] } => {
   const offset = (page - 1) * limit;
   return {
@@ -166,7 +165,7 @@ export const buildPaginationClause = (
  */
 export const getTotalCount = async (
   table: string,
-  whereClause: { text: string; values: any[] } = { text: '', values: [] }
+  whereClause: { text: string; values: any[] } = { text: "", values: [] },
 ): Promise<number> => {
   const countQuery = `
     SELECT COUNT(*) as total
@@ -175,7 +174,7 @@ export const getTotalCount = async (
   `;
 
   const result = await query<{ total: string }>(countQuery, whereClause.values);
-  return parseInt(result[0].total, 10);
+  return parseInt(result[0]?.total || "0", 10);
 };
 
 /**
@@ -186,7 +185,7 @@ export const getTotalCount = async (
  */
 export const recordExists = async (
   table: string,
-  conditions: Record<string, any>
+  conditions: Record<string, any>,
 ): Promise<boolean> => {
   const whereClause = buildWhereClause(conditions);
   const existsQuery = `
@@ -198,7 +197,7 @@ export const recordExists = async (
 
   const result = await query<{ exists: boolean }>(
     existsQuery,
-    whereClause.values
+    whereClause.values,
   );
-  return result[0].exists;
+  return result[0]?.exists || false;
 };

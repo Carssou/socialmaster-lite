@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from "bcrypt";
 
 // Number of salt rounds for bcrypt
 const SALT_ROUNDS = 12;
@@ -13,6 +13,9 @@ export async function hashPassword(password: string): Promise<string> {
 /**
  * Compare a password with its hash
  */
-export async function comparePassword(password: string, hash: string): Promise<boolean> {
+export async function comparePassword(
+  password: string,
+  hash: string,
+): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }

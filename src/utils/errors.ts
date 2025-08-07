@@ -3,9 +3,9 @@
  */
 export class ApiError extends Error {
   statusCode: number;
-  code: string;
+  code?: string;
   details?: any;
-  correlationId?: string;
+  correlationId: string | undefined;
   isOperational: boolean;
 
   /**
@@ -21,10 +21,10 @@ export class ApiError extends Error {
     statusCode: number = 500,
     code?: string,
     details?: any,
-    correlationId?: string
+    correlationId?: string,
   ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.statusCode = statusCode;
     this.code = code || this.getDefaultErrorCode(statusCode);
     this.details = details;
@@ -41,27 +41,27 @@ export class ApiError extends Error {
   private getDefaultErrorCode(statusCode: number): string {
     switch (statusCode) {
       case 400:
-        return 'BAD_REQUEST';
+        return "BAD_REQUEST";
       case 401:
-        return 'UNAUTHORIZED';
+        return "UNAUTHORIZED";
       case 403:
-        return 'FORBIDDEN';
+        return "FORBIDDEN";
       case 404:
-        return 'NOT_FOUND';
+        return "NOT_FOUND";
       case 409:
-        return 'CONFLICT';
+        return "CONFLICT";
       case 422:
-        return 'UNPROCESSABLE_ENTITY';
+        return "UNPROCESSABLE_ENTITY";
       case 429:
-        return 'TOO_MANY_REQUESTS';
+        return "TOO_MANY_REQUESTS";
       case 500:
-        return 'INTERNAL_SERVER_ERROR';
+        return "INTERNAL_SERVER_ERROR";
       case 502:
-        return 'BAD_GATEWAY';
+        return "BAD_GATEWAY";
       case 503:
-        return 'SERVICE_UNAVAILABLE';
+        return "SERVICE_UNAVAILABLE";
       default:
-        return 'UNKNOWN_ERROR';
+        return "UNKNOWN_ERROR";
     }
   }
 }
@@ -71,62 +71,62 @@ export class ApiError extends Error {
  */
 export class ValidationError extends ApiError {
   constructor(message: string, details?: any, correlationId?: string) {
-    super(message, 400, 'VALIDATION_ERROR', details, correlationId);
-    this.name = 'ValidationError';
+    super(message, 400, "VALIDATION_ERROR", details, correlationId);
+    this.name = "ValidationError";
   }
 }
 
 export class AuthenticationError extends ApiError {
   constructor(
-    message: string = 'Authentication required',
-    correlationId?: string
+    message: string = "Authentication required",
+    correlationId?: string,
   ) {
-    super(message, 401, 'AUTHENTICATION_ERROR', undefined, correlationId);
-    this.name = 'AuthenticationError';
+    super(message, 401, "AUTHENTICATION_ERROR", undefined, correlationId);
+    this.name = "AuthenticationError";
   }
 }
 
 export class AuthorizationError extends ApiError {
-  constructor(message: string = 'Access denied', correlationId?: string) {
-    super(message, 403, 'AUTHORIZATION_ERROR', undefined, correlationId);
-    this.name = 'AuthorizationError';
+  constructor(message: string = "Access denied", correlationId?: string) {
+    super(message, 403, "AUTHORIZATION_ERROR", undefined, correlationId);
+    this.name = "AuthorizationError";
   }
 }
 
 export class NotFoundError extends ApiError {
   constructor(resource: string, correlationId?: string) {
-    super(`${resource} not found`, 404, 'NOT_FOUND', undefined, correlationId);
-    this.name = 'NotFoundError';
+    super(`${resource} not found`, 404, "NOT_FOUND", undefined, correlationId);
+    this.name = "NotFoundError";
   }
 }
 
 export class ConflictError extends ApiError {
   constructor(message: string, correlationId?: string) {
-    super(message, 409, 'CONFLICT', undefined, correlationId);
-    this.name = 'ConflictError';
+    super(message, 409, "CONFLICT", undefined, correlationId);
+    this.name = "ConflictError";
   }
 }
 
 export class RateLimitError extends ApiError {
-  constructor(message: string = 'Rate limit exceeded', correlationId?: string) {
-    super(message, 429, 'RATE_LIMIT_EXCEEDED', undefined, correlationId);
-    this.name = 'RateLimitError';
+  constructor(message: string = "Rate limit exceeded", correlationId?: string) {
+    super(message, 429, "RATE_LIMIT_EXCEEDED", undefined, correlationId);
+    this.name = "RateLimitError";
   }
 }
 
 export class ServiceUnavailableError extends ApiError {
   constructor(
-    message: string = 'Service temporarily unavailable',
-    correlationId?: string
+    message: string = "Service temporarily unavailable",
+    correlationId?: string,
   ) {
-    super(message, 503, 'SERVICE_UNAVAILABLE', undefined, correlationId);
-    this.name = 'ServiceUnavailableError';
+    super(message, 503, "SERVICE_UNAVAILABLE", undefined, correlationId);
+    this.name = "ServiceUnavailableError";
   }
 }
 
-import { Request, Response, NextFunction } from 'express';
-import { logger } from '../config/logger';
-import { BusinessMetrics } from '../services/monitoring/business-metrics';
+import { Request, Response, NextFunction } from "express";
+import { logger } from "../logger";
+// import { BusinessMetrics } from '../services/monitoring/business-metrics'; // Removed enterprise monitoring
 
 /**
  * Generate correlation ID if not present
@@ -138,8 +138,8 @@ function getCorrelationId(req: Request): string {
   // Try headers
   if (!correlationId) {
     correlationId =
-      (req.headers['x-correlation-id'] as string) ||
-      (req.headers['x-request-id'] as string);
+      (req.headers["x-correlation-id"] as string) ||
+      (req.headers["x-request-id"] as string);
   }
 
   // Generate new one if still not found
@@ -157,19 +157,19 @@ export const errorHandler = (
   err: any,
   req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ): void => {
   const correlationId = getCorrelationId(req);
   let statusCode = 500;
-  let errorCode = 'INTERNAL_SERVER_ERROR';
-  let message = 'An unexpected error occurred';
+  let errorCode = "INTERNAL_SERVER_ERROR";
+  let message = "An unexpected error occurred";
   let details = undefined;
   let isOperational = false;
 
   // Handle ApiError and its subclasses
   if (err instanceof ApiError) {
     statusCode = err.statusCode;
-    errorCode = err.code;
+    errorCode = err.code || "UNKNOWN_ERROR";
     message = err.message;
     details = err.details;
     isOperational = err.isOperational;
@@ -178,45 +178,45 @@ export const errorHandler = (
     if (!err.correlationId) {
       err.correlationId = correlationId;
     }
-  } else if (err.name === 'ValidationError' || err.name === 'ZodError') {
+  } else if (err.name === "ValidationError" || err.name === "ZodError") {
     // Handle Zod or other validation errors
     statusCode = 400;
-    errorCode = 'VALIDATION_ERROR';
-    message = 'Request validation failed';
+    errorCode = "VALIDATION_ERROR";
+    message = "Request validation failed";
     details = err.errors || err.issues || err.details || err.message;
     isOperational = true;
   } else if (
-    err.name === 'UnauthorizedError' ||
-    err.name === 'JsonWebTokenError'
+    err.name === "UnauthorizedError" ||
+    err.name === "JsonWebTokenError"
   ) {
     // Handle JWT authentication errors
     statusCode = 401;
-    errorCode = 'AUTHENTICATION_ERROR';
-    message = 'Authentication failed';
+    errorCode = "AUTHENTICATION_ERROR";
+    message = "Authentication failed";
     isOperational = true;
-  } else if (err.name === 'TokenExpiredError') {
+  } else if (err.name === "TokenExpiredError") {
     // Handle expired JWT tokens
     statusCode = 401;
-    errorCode = 'TOKEN_EXPIRED';
-    message = 'Authentication token has expired';
+    errorCode = "TOKEN_EXPIRED";
+    message = "Authentication token has expired";
     isOperational = true;
-  } else if (err.code === 'ECONNREFUSED') {
+  } else if (err.code === "ECONNREFUSED") {
     // Handle database connection errors
     statusCode = 503;
-    errorCode = 'SERVICE_UNAVAILABLE';
-    message = 'Database connection failed';
+    errorCode = "SERVICE_UNAVAILABLE";
+    message = "Database connection failed";
     isOperational = true;
-  } else if (err.code === '23505') {
+  } else if (err.code === "23505") {
     // Handle PostgreSQL unique constraint violation
     statusCode = 409;
-    errorCode = 'DUPLICATE_ENTRY';
-    message = 'Resource already exists';
+    errorCode = "DUPLICATE_ENTRY";
+    message = "Resource already exists";
     isOperational = true;
-  } else if (err.code === '23503') {
+  } else if (err.code === "23503") {
     // Handle PostgreSQL foreign key constraint violation
     statusCode = 400;
-    errorCode = 'FOREIGN_KEY_VIOLATION';
-    message = 'Invalid reference to related resource';
+    errorCode = "FOREIGN_KEY_VIOLATION";
+    message = "Invalid reference to related resource";
     isOperational = true;
   }
 
@@ -231,7 +231,7 @@ export const errorHandler = (
     message,
     method: req.method,
     url: req.originalUrl,
-    userAgent: req.get('User-Agent'),
+    userAgent: req.get("User-Agent"),
     ip: req.ip,
     userId,
     details,
@@ -240,20 +240,20 @@ export const errorHandler = (
   };
 
   if (isOperational) {
-    logger.warn('Operational error occurred', logData);
+    logger.warn("Operational error occurred", logData);
   } else {
-    logger.error('Unexpected error occurred', logData);
+    logger.error("Unexpected error occurred", logData);
   }
 
-  // Track error in business metrics
-  BusinessMetrics.trackError(errorCode, message, {
-    userId,
-    statusCode,
-    correlationId,
-    url: req.originalUrl,
-    method: req.method,
-    severity: statusCode >= 500 ? 'high' : 'medium',
-  });
+  // Track error in business metrics - REMOVED: Enterprise monitoring
+  // BusinessMetrics.trackError(errorCode, message, {
+  //   userId,
+  //   statusCode,
+  //   correlationId,
+  //   url: req.originalUrl,
+  //   method: req.method,
+  //   severity: statusCode >= 500 ? 'high' : 'medium',
+  // });
 
   // Send standardized error response
   const response = {
@@ -268,7 +268,7 @@ export const errorHandler = (
   };
 
   // Add additional debug info in development
-  if (process.env.NODE_ENV === 'development' && !isOperational) {
+  if (process.env.NODE_ENV === "development" && !isOperational) {
     response.error = {
       ...response.error,
       stack: err.stack,
@@ -293,11 +293,11 @@ export const asyncHandler = (fn: Function) => {
 export const notFoundHandler = (
   req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ): void => {
   const correlationId = getCorrelationId(req);
 
-  logger.warn('Route not found', {
+  logger.warn("Route not found", {
     correlationId,
     method: req.method,
     url: req.originalUrl,
@@ -307,8 +307,8 @@ export const notFoundHandler = (
   res.status(404).json({
     success: false,
     error: {
-      code: 'NOT_FOUND',
-      message: 'The requested resource was not found',
+      code: "NOT_FOUND",
+      message: "The requested resource was not found",
       correlationId,
       timestamp: new Date().toISOString(),
     },

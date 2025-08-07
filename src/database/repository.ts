@@ -1,10 +1,6 @@
 // Generic repository for database operations
-import {
-  transaction,
-  buildWhereClause,
-  buildPaginationClause,
-} from './index';
-import { PaginatedResult, QueryParams } from '../types';
+import { transaction, buildWhereClause, buildPaginationClause } from "./index";
+import { PaginatedResult, QueryParams } from "../types";
 
 /**
  * Generic repository class for database operations
@@ -20,10 +16,10 @@ export class Repository<T> {
    */
   constructor(
     private readonly tableName: string,
-    private readonly primaryKey: string = 'id'
+    private readonly primaryKey: string = "id",
   ) {
     // Initialize pgPool once in constructor
-    const { pgPool } = require('../config/database');
+    const { pgPool } = require("../config/database");
     this.pgPool = pgPool;
   }
 
@@ -37,7 +33,9 @@ export class Repository<T> {
   /**
    * Convert object keys from camelCase to snake_case
    */
-  private convertKeysToSnakeCase(obj: Record<string, any>): Record<string, any> {
+  private convertKeysToSnakeCase(
+    obj: Record<string, any>,
+  ): Record<string, any> {
     const converted: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
       converted[this.toSnakeCase(key)] = value;
@@ -58,10 +56,10 @@ export class Repository<T> {
     // Build where clause
     const whereClause = filters
       ? buildWhereClause(filters)
-      : { text: '', values: [] };
+      : { text: "", values: [] };
 
     // Build sort clause
-    let sortClause = '';
+    let sortClause = "";
     if (sort) {
       sortClause = `ORDER BY ${sort.field} ${sort.direction.toUpperCase()}`;
     }
@@ -70,7 +68,7 @@ export class Repository<T> {
     const paginationClause = buildPaginationClause(
       page,
       limit,
-      whereClause.values.length + 1
+      whereClause.values.length + 1,
     );
 
     // Get total count using proper client connection
@@ -172,10 +170,10 @@ export class Repository<T> {
     const dbData = this.convertKeysToSnakeCase(data as Record<string, any>);
     const fields = Object.keys(dbData);
     const values = Object.values(dbData);
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
 
     const sql = `
-      INSERT INTO ${this.tableName} (${fields.join(', ')})
+      INSERT INTO ${this.tableName} (${fields.join(", ")})
       VALUES (${placeholders})
       RETURNING *
     `;
@@ -211,7 +209,7 @@ export class Repository<T> {
 
     const setClause = fields
       .map((field, i) => `${field} = $${i + 1}`)
-      .join(', ');
+      .join(", ");
 
     const sql = `
       UPDATE ${this.tableName}
@@ -260,8 +258,8 @@ export class Repository<T> {
   async count(filters?: Record<string, any>): Promise<number> {
     const whereClause = filters
       ? buildWhereClause(filters)
-      : { text: '', values: [] };
-    
+      : { text: "", values: [] };
+
     const countQuery = `
       SELECT COUNT(*) as total
       FROM ${this.tableName}
@@ -329,7 +327,7 @@ export class Repository<T> {
    * @returns Transaction result
    */
   async executeTransaction<R = any>(
-    callback: (client: any) => Promise<R>
+    callback: (client: any) => Promise<R>,
   ): Promise<R> {
     return transaction<R>(callback);
   }

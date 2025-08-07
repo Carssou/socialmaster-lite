@@ -47,24 +47,19 @@ export const createPerformanceIndexes = async (client: any): Promise<void> => {
       return;
     }
 
-    // Create indexes for frequently queried columns
+    // Create indexes for frequently queried columns (simplified schema)
     const indexQueries = [
       // Users table indexes
       'CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email))',
-      'CREATE INDEX IF NOT EXISTS idx_users_subscription ON users (subscription_tier)',
-
-      // Content table indexes
-      'CREATE INDEX IF NOT EXISTS idx_content_user_type ON content (user_id, type)',
-      "CREATE INDEX IF NOT EXISTS idx_content_status_scheduled ON content (status, scheduled_at) WHERE status = 'scheduled'",
-      'CREATE INDEX IF NOT EXISTS idx_content_published_at ON content (published_at)',
+      'CREATE INDEX IF NOT EXISTS idx_users_tier ON users (tier)',
 
       // Social accounts indexes
       'CREATE INDEX IF NOT EXISTS idx_social_accounts_platform ON social_accounts (platform)',
-      'CREATE INDEX IF NOT EXISTS idx_social_accounts_is_active ON social_accounts (is_active)',
+      'CREATE INDEX IF NOT EXISTS idx_social_accounts_user ON social_accounts (user_id)',
 
       // Post metrics indexes
       'CREATE INDEX IF NOT EXISTS idx_post_metrics_engagement ON post_metrics (engagement_rate DESC)',
-      'CREATE INDEX IF NOT EXISTS idx_post_metrics_platform_published ON post_metrics (platform, published_at)',
+      'CREATE INDEX IF NOT EXISTS idx_post_metrics_date ON post_metrics (date)',
 
       // Account metrics indexes
       'CREATE INDEX IF NOT EXISTS idx_account_metrics_date_range ON account_metrics (social_account_id, date)',
@@ -92,15 +87,14 @@ export const analyzeDatabase = async (client: any): Promise<void> => {
       return;
     }
 
-    // Analyze main tables
+    // Analyze main tables (simplified schema)
     const tables = [
       'users',
-      'brand_guidelines',
       'social_accounts',
-      'content',
       'post_metrics',
       'account_metrics',
-      'strategy_configs',
+      'ai_analysis',
+      'tier_settings',
     ];
 
     for (const table of tables) {

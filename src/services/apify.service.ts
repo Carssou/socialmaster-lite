@@ -1,8 +1,7 @@
-import { ApifyClient } from 'apify-client';
-import { Repository } from '../database/repository';
-import { ApiError } from '../utils/errors';
-import { logger } from '../config/logger';
-import { Platform } from '../types/models';
+import { ApifyClient } from "apify-client";
+import { Repository } from "../database/repository";
+import { logger } from "../logger";
+import { Platform } from "../types/models";
 
 // Interface for Instagram post data from Apify
 export interface InstagramPost {
@@ -36,9 +35,12 @@ export interface InstagramProfile {
 
 // Custom error class for Apify operations
 export class ApifyError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
     super(message);
-    this.name = 'ApifyError';
+    this.name = "ApifyError";
   }
 }
 
@@ -86,15 +88,19 @@ export class ApifyService {
 
   constructor() {
     if (!process.env.APIFY_API_TOKEN) {
-      throw new ApifyError('APIFY_API_TOKEN environment variable is not configured');
+      throw new ApifyError(
+        "APIFY_API_TOKEN environment variable is not configured",
+      );
     }
 
     this.client = new ApifyClient({
       token: process.env.APIFY_API_TOKEN,
     });
 
-    this.accountMetricsRepo = new Repository<AccountMetricsDB>('account_metrics');
-    this.postMetricsRepo = new Repository<PostMetricsDB>('post_metrics');
+    this.accountMetricsRepo = new Repository<AccountMetricsDB>(
+      "account_metrics",
+    );
+    this.postMetricsRepo = new Repository<PostMetricsDB>("post_metrics");
   }
 
   /**
@@ -108,19 +114,25 @@ export class ApifyService {
 
       const input = {
         directUrls: [`https://www.instagram.com/${username}/`],
-        resultsType: 'details',
+        resultsType: "details",
         resultsLimit: 1,
-        searchType: 'user',
+        searchType: "user",
         searchLimit: 250,
         addParentData: false,
       };
 
       if (!process.env.APIFY_INSTAGRAM_ACTOR) {
-        throw new ApifyError('APIFY_INSTAGRAM_ACTOR environment variable is not configured');
+        throw new ApifyError(
+          "APIFY_INSTAGRAM_ACTOR environment variable is not configured",
+        );
       }
-      
-      const run = await this.client.actor(process.env.APIFY_INSTAGRAM_ACTOR).call(input);
-      const { items } = await this.client.dataset(run.defaultDatasetId).listItems();
+
+      const run = await this.client
+        .actor(process.env.APIFY_INSTAGRAM_ACTOR)
+        .call(input);
+      const { items } = await this.client
+        .dataset(run.defaultDatasetId)
+        .listItems();
 
       if (!items || items.length === 0) {
         throw new ApifyError(`No profile found for username: ${username}`);
@@ -130,12 +142,20 @@ export class ApifyService {
       const posts = (data.latestPosts || []).slice(0, 12);
 
       // Calculate engagement metrics
-      const totalLikes = posts.reduce((sum: number, post: any) => sum + (post.likesCount || 0), 0);
-      const totalComments = posts.reduce((sum: number, post: any) => sum + (post.commentsCount || 0), 0);
+      const totalLikes = posts.reduce(
+        (sum: number, post: any) => sum + (post.likesCount || 0),
+        0,
+      );
+      const totalComments = posts.reduce(
+        (sum: number, post: any) => sum + (post.commentsCount || 0),
+        0,
+      );
       const avgLikes = Math.round(totalLikes / posts.length) || 0;
       const avgComments = Math.round(totalComments / posts.length) || 0;
-      const engagementRate = data.followersCount
-        ? Number((((avgLikes + avgComments) / data.followersCount) * 100).toFixed(2))
+      const _engagementRate = data.followersCount
+        ? Number(
+            (((avgLikes + avgComments) / data.followersCount) * 100).toFixed(2),
+          )
         : 0;
 
       const profile: InstagramProfile = {
@@ -143,19 +163,19 @@ export class ApifyService {
         username: data.username,
         url: data.url,
         fullName: data.fullName || data.username,
-        biography: data.biography || '',
+        biography: data.biography || "",
         followersCount: data.followersCount || 0,
         followsCount: data.followsCount || 0,
         postsCount: data.postsCount || 0,
         private: Boolean(data.private),
         verified: Boolean(data.verified),
-        profilePicUrl: data.profilePicUrl || '',
-        profilePicUrlHD: data.profilePicUrlHD || '',
+        profilePicUrl: data.profilePicUrl || "",
+        profilePicUrlHD: data.profilePicUrlHD || "",
         latestPosts: posts.map((post: any) => ({
           id: post.id,
           type: post.type,
           shortCode: post.shortCode,
-          caption: post.caption || '',
+          caption: post.caption || "",
           likesCount: post.likesCount || 0,
           url: post.url,
           displayUrl: post.displayUrl,
@@ -164,14 +184,19 @@ export class ApifyService {
         })),
       };
 
-      logger.info(`Successfully scraped Instagram profile: ${username} (${profile.followersCount} followers)`);
+      logger.info(
+        `Successfully scraped Instagram profile: ${username} (${profile.followersCount} followers)`,
+      );
       return profile;
     } catch (error) {
       if (error instanceof ApifyError) {
         throw error;
       }
       logger.error(`Failed to scrape Instagram profile ${username}:`, error);
-      throw new ApifyError(`Failed to scrape Instagram profile: ${username}`, error);
+      throw new ApifyError(
+        `Failed to scrape Instagram profile: ${username}`,
+        error,
+      );
     }
   }
 
@@ -180,20 +205,32 @@ export class ApifyService {
    * @param socialAccountId Database ID of the social account
    * @param username Instagram username
    */
-  async collectInstagramMetrics(socialAccountId: string, username: string): Promise<void> {
+  async collectInstagramMetrics(
+    socialAccountId: string,
+    username: string,
+  ): Promise<void> {
     try {
-      logger.info(`Collecting Instagram metrics for account: ${socialAccountId} (${username})`);
+      logger.info(
+        `Collecting Instagram metrics for account: ${socialAccountId} (${username})`,
+      );
 
       const profile = await this.scrapeInstagramProfile(username);
 
       // Calculate engagement metrics
       const posts = profile.latestPosts;
       const totalLikes = posts.reduce((sum, post) => sum + post.likesCount, 0);
-      const totalComments = posts.reduce((sum, post) => sum + post.commentsCount, 0);
+      const totalComments = posts.reduce(
+        (sum, post) => sum + post.commentsCount,
+        0,
+      );
       const avgLikes = Math.round(totalLikes / posts.length) || 0;
       const avgComments = Math.round(totalComments / posts.length) || 0;
       const engagementRate = profile.followersCount
-        ? Number((((avgLikes + avgComments) / profile.followersCount) * 100).toFixed(2))
+        ? Number(
+            (((avgLikes + avgComments) / profile.followersCount) * 100).toFixed(
+              2,
+            ),
+          )
         : 0;
 
       // Store account metrics
@@ -211,7 +248,13 @@ export class ApifyService {
       // Store post metrics for recent posts
       for (const post of posts) {
         const postEngagementRate = profile.followersCount
-          ? Number((((post.likesCount + post.commentsCount) / profile.followersCount) * 100).toFixed(2))
+          ? Number(
+              (
+                ((post.likesCount + post.commentsCount) /
+                  profile.followersCount) *
+                100
+              ).toFixed(2),
+            )
           : 0;
 
         await this.postMetricsRepo.create({
@@ -229,10 +272,18 @@ export class ApifyService {
         });
       }
 
-      logger.info(`Successfully collected metrics for ${username}: ${posts.length} posts stored`);
+      logger.info(
+        `Successfully collected metrics for ${username}: ${posts.length} posts stored`,
+      );
     } catch (error) {
-      logger.error(`Failed to collect Instagram metrics for ${socialAccountId}:`, error);
-      throw new ApifyError(`Failed to collect Instagram metrics for account: ${socialAccountId}`, error);
+      logger.error(
+        `Failed to collect Instagram metrics for ${socialAccountId}:`,
+        error,
+      );
+      throw new ApifyError(
+        `Failed to collect Instagram metrics for account: ${socialAccountId}`,
+        error,
+      );
     }
   }
 
@@ -241,10 +292,13 @@ export class ApifyService {
    * @param socialAccountId Database ID of the social account
    * @param limit Number of recent metrics to retrieve (default: 10)
    */
-  async getRecentAccountMetrics(socialAccountId: string, limit: number = 10): Promise<AccountMetricsDB[]> {
+  async getRecentAccountMetrics(
+    socialAccountId: string,
+    limit: number = 10,
+  ): Promise<AccountMetricsDB[]> {
     return this.accountMetricsRepo.executeQuery(
-      'SELECT * FROM account_metrics WHERE social_account_id = $1 ORDER BY collected_at DESC LIMIT $2',
-      [socialAccountId, limit]
+      "SELECT * FROM account_metrics WHERE social_account_id = $1 ORDER BY collected_at DESC LIMIT $2",
+      [socialAccountId, limit],
     );
   }
 
@@ -253,10 +307,13 @@ export class ApifyService {
    * @param socialAccountId Database ID of the social account
    * @param limit Number of recent posts to retrieve (default: 20)
    */
-  async getRecentPostMetrics(socialAccountId: string, limit: number = 20): Promise<PostMetricsDB[]> {
+  async getRecentPostMetrics(
+    socialAccountId: string,
+    limit: number = 20,
+  ): Promise<PostMetricsDB[]> {
     return this.postMetricsRepo.executeQuery(
-      'SELECT * FROM post_metrics WHERE social_account_id = $1 ORDER BY posted_at DESC LIMIT $2',
-      [socialAccountId, limit]
+      "SELECT * FROM post_metrics WHERE social_account_id = $1 ORDER BY posted_at DESC LIMIT $2",
+      [socialAccountId, limit],
     );
   }
 }

@@ -70,7 +70,7 @@ export class AIInsightsService {
     try {
       const promptPath = join(
         process.cwd(),
-        "src/prompts/instagram-insights.prompt.md"
+        "src/prompts/instagram-insights.prompt.md",
       );
       return readFileSync(promptPath, "utf-8");
     } catch (error) {
@@ -97,7 +97,7 @@ export class AIInsightsService {
    */
   async generateAccountInsights(
     userId: string,
-    socialAccountId: string
+    socialAccountId: string,
   ): Promise<AIAnalysisDB[]> {
     try {
       logger.info(`Generating AI insights for account: ${socialAccountId}`);
@@ -105,7 +105,7 @@ export class AIInsightsService {
       // Get recent account metrics for trend analysis
       const accountMetrics = await apifyService.getRecentAccountMetrics(
         socialAccountId,
-        30
+        30,
       );
       if (accountMetrics.length === 0) {
         throw new ApiError("No account metrics found for analysis", 404);
@@ -114,13 +114,13 @@ export class AIInsightsService {
       // Get recent post metrics
       const postMetrics = await apifyService.getRecentPostMetrics(
         socialAccountId,
-        50
+        50,
       );
 
       // Generate insights using LLM
       const insights = await this.generateLLMInsights(
         accountMetrics,
-        postMetrics
+        postMetrics,
       );
 
       // Store insights in database
@@ -133,23 +133,23 @@ export class AIInsightsService {
           {
             accountMetrics: accountMetrics.slice(0, 5), // Include recent metrics
             postMetrics: postMetrics.slice(0, 10), // Include recent posts
-          }
+          },
         );
         storedInsights.push(storedInsight);
       }
 
       logger.info(
-        `Generated ${storedInsights.length} insights for account: ${socialAccountId}`
+        `Generated ${storedInsights.length} insights for account: ${socialAccountId}`,
       );
       return storedInsights;
     } catch (error) {
       logger.error(
         `Failed to generate insights for account ${socialAccountId}:`,
-        error
+        error,
       );
       throw new ApiError(
         `Failed to generate insights for account: ${socialAccountId}`,
-        500
+        500,
       );
     }
   }
@@ -159,7 +159,7 @@ export class AIInsightsService {
    */
   private async generateLLMInsights(
     accountMetrics: any[],
-    postMetrics: any[]
+    postMetrics: any[],
   ): Promise<LLMInsightResponse[]> {
     const userPrompt = this.createUserPrompt(accountMetrics, postMetrics);
 
@@ -194,13 +194,13 @@ export class AIInsightsService {
         ) {
           throw new ApiError(
             `Invalid insight structure at index ${index}`,
-            500
+            500,
           );
         }
       });
 
       logger.info(
-        `Successfully generated ${parsedResponse.length} insights via LLM`
+        `Successfully generated ${parsedResponse.length} insights via LLM`,
       );
       return parsedResponse;
     } catch (error) {
@@ -216,12 +216,9 @@ export class AIInsightsService {
    * Create user prompt aligned with system prompt in instagram-insights.prompt.md
    * This method creates a concise user prompt that references the detailed system instructions
    */
-  private createUserPrompt(
-    accountMetrics: any[],
-    postMetrics: any[]
-  ): string {
+  private createUserPrompt(accountMetrics: any[], postMetrics: any[]): string {
     const analysisData = this.prepareAnalysisData(accountMetrics, postMetrics);
-    
+
     return `Please analyze the following Instagram account data:
 
 ${analysisData}
@@ -236,7 +233,7 @@ Return your analysis in the exact JSON format specified in your system instructi
    */
   private prepareAnalysisData(
     accountMetrics: any[],
-    postMetrics: any[]
+    postMetrics: any[],
   ): string {
     const latest = accountMetrics[0];
     const oldest = accountMetrics[accountMetrics.length - 1];
@@ -264,7 +261,7 @@ ${postMetrics
   .slice(0, 20)
   .map(
     (post, i) =>
-      `Post ${i + 1}: ${post.likes_count} likes, ${post.comments_count} comments, ${post.engagement_rate.toFixed(2)}% engagement`
+      `Post ${i + 1}: ${post.likes_count} likes, ${post.comments_count} comments, ${post.engagement_rate.toFixed(2)}% engagement`,
   )
   .join("\n")}
 
@@ -284,7 +281,7 @@ ENGAGEMENT TRENDS:
         acc[post.post_type] = (acc[post.post_type] || 0) + 1;
         return acc;
       },
-      {} as Record<string, number>
+      {} as Record<string, number>,
     );
 
     return Object.entries(types)
@@ -299,13 +296,13 @@ ENGAGEMENT TRENDS:
     userId: string,
     socialAccountId: string,
     insight: LLMInsightResponse,
-    supportingData: any
+    supportingData: any,
   ): Promise<AIAnalysisDB> {
     const priority = this.calculatePriority(insight.impact, insight.urgency);
     const score = this.calculateScore(
       insight.confidence,
       insight.impact,
-      insight.urgency
+      insight.urgency,
     );
 
     return this.aiAnalysisRepo.create({
@@ -339,7 +336,7 @@ ENGAGEMENT TRENDS:
    */
   private calculatePriority(
     impact: keyof typeof ImpactLevel,
-    urgency: keyof typeof UrgencyLevel
+    urgency: keyof typeof UrgencyLevel,
   ): keyof typeof PriorityLevel {
     if (impact === "HIGH" && urgency === "HIGH") {
       return "CRITICAL";
@@ -362,7 +359,7 @@ ENGAGEMENT TRENDS:
   private calculateScore(
     confidence: number,
     impact: keyof typeof ImpactLevel,
-    urgency: keyof typeof UrgencyLevel
+    urgency: keyof typeof UrgencyLevel,
   ): number {
     const impactWeight = impact === "HIGH" ? 3 : impact === "MEDIUM" ? 2 : 1;
     const urgencyWeight = urgency === "HIGH" ? 3 : urgency === "MEDIUM" ? 2 : 1;
@@ -374,11 +371,11 @@ ENGAGEMENT TRENDS:
    */
   async getUserInsights(
     userId: string,
-    limit: number = 20
+    limit: number = 20,
   ): Promise<AIAnalysisDB[]> {
     return this.aiAnalysisRepo.executeQuery(
       "SELECT * FROM ai_analysis WHERE user_id = $1 AND is_active = true AND (valid_until IS NULL OR valid_until > NOW()) ORDER BY score DESC, created_at DESC LIMIT $2",
-      [userId, limit]
+      [userId, limit],
     );
   }
 
@@ -387,11 +384,11 @@ ENGAGEMENT TRENDS:
    */
   async getAccountInsights(
     socialAccountId: string,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<AIAnalysisDB[]> {
     return this.aiAnalysisRepo.executeQuery(
       "SELECT * FROM ai_analysis WHERE social_account_id = $1 AND is_active = true AND (valid_until IS NULL OR valid_until > NOW()) ORDER BY score DESC, created_at DESC LIMIT $2",
-      [socialAccountId, limit]
+      [socialAccountId, limit],
     );
   }
 
@@ -411,7 +408,7 @@ ENGAGEMENT TRENDS:
    */
   private async callLLM(
     systemPrompt: string,
-    userPrompt: string
+    userPrompt: string,
   ): Promise<string> {
     const provider = process.env.LLM_PROVIDER?.toLowerCase();
 
@@ -439,7 +436,7 @@ ENGAGEMENT TRENDS:
    */
   private async callOpenAI(
     systemPrompt: string,
-    userPrompt: string
+    userPrompt: string,
   ): Promise<string> {
     if (!process.env.OPENAI_API_KEY) {
       throw new ApiError("OPENAI_API_KEY environment variable not set", 500);
@@ -476,7 +473,7 @@ ENGAGEMENT TRENDS:
    */
   private async callAnthropic(
     systemPrompt: string,
-    userPrompt: string
+    userPrompt: string,
   ): Promise<string> {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new ApiError("ANTHROPIC_API_KEY environment variable not set", 500);

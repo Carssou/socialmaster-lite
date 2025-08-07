@@ -2,58 +2,58 @@
 
 // User tiers (simplified)
 export enum UserTier {
-  FREE = 'free',
-  BASIC = 'basic',
+  FREE = "free",
+  BASIC = "basic",
 }
 
 // Social media platforms
 export enum Platform {
-  TWITTER = 'twitter',
-  INSTAGRAM = 'instagram',
-  FACEBOOK = 'facebook',
-  LINKEDIN = 'linkedin',
-  TIKTOK = 'tiktok',
-  YOUTUBE = 'youtube',
+  TWITTER = "twitter",
+  INSTAGRAM = "instagram",
+  FACEBOOK = "facebook",
+  LINKEDIN = "linkedin",
+  TIKTOK = "tiktok",
+  YOUTUBE = "youtube",
 }
 
 // AI insight types
 export enum InsightType {
-  ENGAGEMENT_ANALYSIS = 'engagement_analysis',
-  GROWTH_TREND = 'growth_trend',
-  CONTENT_PERFORMANCE = 'content_performance',
-  AUDIENCE_BEHAVIOR = 'audience_behavior',
-  POSTING_OPTIMIZATION = 'posting_optimization',
+  ENGAGEMENT_ANALYSIS = "engagement_analysis",
+  GROWTH_TREND = "growth_trend",
+  CONTENT_PERFORMANCE = "content_performance",
+  AUDIENCE_BEHAVIOR = "audience_behavior",
+  POSTING_OPTIMIZATION = "posting_optimization",
 }
 
 // AI insight categories
 export enum InsightCategory {
-  PERFORMANCE = 'performance',
-  GROWTH = 'growth',
-  CONTENT = 'content',
-  AUDIENCE = 'audience',
-  OPTIMIZATION = 'optimization',
+  PERFORMANCE = "performance",
+  GROWTH = "growth",
+  CONTENT = "content",
+  AUDIENCE = "audience",
+  OPTIMIZATION = "optimization",
 }
 
 // AI insight priority levels
 export enum PriorityLevel {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  CRITICAL = 'critical',
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+  CRITICAL = "critical",
 }
 
 // Impact levels for insights
 export enum ImpactLevel {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
 }
 
 // Urgency levels for insights
 export enum UrgencyLevel {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
 }
 
 // Base model with common fields
@@ -251,7 +251,7 @@ export interface FilterParams {
 // Sort parameters
 export interface SortParams {
   field: string;
-  direction: 'asc' | 'desc';
+  direction: "asc" | "desc";
 }
 
 // Query parameters combining pagination, filtering and sorting

@@ -1,15 +1,14 @@
-import { Repository } from '../database/repository';
-import { pgPool } from '../config/database';
+import { Repository } from "../database/repository";
+import { pgPool } from "../database";
 import {
-  User,
   UserRegistrationDto,
   UserLoginDto,
   AuthResponse,
-} from '../types/models';
-import { generateToken, generateRefreshToken } from '../utils/jwt';
-import { hashPassword, comparePassword } from '../utils/password';
-import { logger } from '../config/logger';
-import { ApiError } from '../utils/errors';
+} from "../types/models";
+import { generateToken, generateRefreshToken } from "../utils/jwt";
+import { hashPassword, comparePassword } from "../utils/password";
+import { logger } from "../logger";
+import { ApiError } from "../utils/errors";
 
 // Interface to match database column names
 interface UserDB {
@@ -31,7 +30,7 @@ export class AuthService {
   private userRepository: Repository<UserDB>;
 
   constructor() {
-    this.userRepository = new Repository<UserDB>('users');
+    this.userRepository = new Repository<UserDB>("users");
   }
 
   /**
@@ -42,11 +41,11 @@ export class AuthService {
   async register(userData: UserRegistrationDto): Promise<AuthResponse> {
     // Check if user already exists
     const existingUser = await this.userRepository.findByField(
-      'email',
-      userData.email
+      "email",
+      userData.email,
     );
     if (existingUser.length > 0) {
-      throw new ApiError('User with this email already exists', 409);
+      throw new ApiError("User with this email already exists", 409);
     }
 
     // Hash the password
@@ -57,7 +56,7 @@ export class AuthService {
       email: userData.email,
       name: userData.name,
       password_hash: passwordHash,
-      tier: 'free', // Default to free tier
+      tier: "free", // Default to free tier
       is_active: false, // Require manual approval
       email_verified: false,
     });
@@ -80,7 +79,7 @@ export class AuthService {
       },
       accessToken: token,
       refreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || '86400', 10),
+      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
     };
   }
 
@@ -94,29 +93,34 @@ export class AuthService {
     const client = await pgPool.connect();
     let result;
     try {
-      result = await client.query('SELECT * FROM users WHERE email = $1', [loginData.email]);
+      result = await client.query("SELECT * FROM users WHERE email = $1", [
+        loginData.email,
+      ]);
     } finally {
       client.release(); // Always release the client back to the pool
     }
-    
+
     if (result.rows.length === 0) {
-      throw new ApiError('Invalid email or password', 401);
+      throw new ApiError("Invalid email or password", 401);
     }
 
     const user = result.rows[0];
 
     // Check if the user is active
     if (!user.is_active) {
-      throw new ApiError('Account is pending approval. Please wait for manual activation.', 403);
+      throw new ApiError(
+        "Account is pending approval. Please wait for manual activation.",
+        403,
+      );
     }
 
     // Verify the password
     const isPasswordValid = await comparePassword(
       loginData.password,
-      user.password_hash
+      user.password_hash,
     );
     if (!isPasswordValid) {
-      throw new ApiError('Invalid email or password', 401);
+      throw new ApiError("Invalid email or password", 401);
     }
 
     // Generate tokens
@@ -139,7 +143,7 @@ export class AuthService {
       },
       accessToken: token,
       refreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || '86400', 10),
+      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
     };
   }
 
@@ -149,7 +153,7 @@ export class AuthService {
    * @returns New authentication tokens
    */
   async refreshToken(
-    refreshToken: string
+    refreshToken: string,
   ): Promise<{ token: string; refreshToken: string; expiresIn: number }> {
     // Verify and decode the refresh token
     const decoded = await this.verifyRefreshToken(refreshToken);
@@ -161,7 +165,7 @@ export class AuthService {
     return {
       token: newToken,
       refreshToken: newRefreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || '86400', 10),
+      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
     };
   }
 
@@ -171,21 +175,21 @@ export class AuthService {
    * @returns Decoded token payload
    */
   private async verifyRefreshToken(
-    refreshToken: string
+    refreshToken: string,
   ): Promise<{ userId: string }> {
     try {
-      const jwt = require('jsonwebtoken');
+      const jwt = require("jsonwebtoken");
       const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
       // Check if the user exists and is active
       const user = await this.userRepository.findById(decoded.userId);
       if (!user || !user.is_active) {
-        throw new ApiError('Invalid refresh token', 401);
+        throw new ApiError("Invalid refresh token", 401);
       }
 
       return { userId: decoded.userId };
-    } catch (error) {
-      throw new ApiError('Invalid refresh token', 401);
+    } catch {
+      throw new ApiError("Invalid refresh token", 401);
     }
   }
 
