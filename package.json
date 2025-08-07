@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "./scripts/start-dev.sh",
-    "dev:no-migrate": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev:no-migrate": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -49,13 +49,18 @@
     "jest": "^30.0.4",
     "prettier": "^3.6.2",
     "supertest": "^7.1.4",
-    "ts-jest": "^29.4.0",
-    "ts-node-dev": "^2.0.0",
+    "ts-jest": "^29.4.1",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "glob": "^10.0.0",
+    "rimraf": "^5.0.0",
+    "inflight": "npm:@isaacs/fs-minipass@latest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.57.0",
-    "apify-client": "^2.8.1",
+    "apify-client": "^2.13.0",
     "axios": "^1.10.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
