@@ -19,7 +19,7 @@ export class Repository<T> {
     private readonly primaryKey: string = "id",
   ) {
     // Initialize pgPool once in constructor
-    const { pgPool } = require("../config/database");
+    const { pgPool } = require("../database");
     this.pgPool = pgPool;
   }
 

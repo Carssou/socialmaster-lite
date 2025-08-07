@@ -6,7 +6,6 @@ import { logger } from "../logger";
 import {
   InsightType,
   InsightCategory,
-  PriorityLevel,
   ImpactLevel,
   UrgencyLevel,
 } from "../types/models";
@@ -21,16 +20,17 @@ interface AIAnalysisDB {
   category: string;
   title: string;
   description: string;
-  insights: string[];
-  recommendations: string[];
+  explanation: string;
   confidence: number;
   impact: string;
   urgency: string;
-  priority: string;
   score: number;
+  tags?: string[];
   is_active: boolean;
+  is_acknowledged?: boolean;
   acknowledged_by?: string;
   acknowledged_at?: Date;
+  acknowledgment_notes?: string;
   valid_until?: Date;
   supporting_data?: Record<string, any>;
   generation_metadata?: Record<string, any>;
@@ -40,15 +40,15 @@ interface AIAnalysisDB {
 
 // Interface for LLM-generated insight response
 interface LLMInsightResponse {
-  type: keyof typeof InsightType;
-  category: keyof typeof InsightCategory;
+  type: string;
+  category: string;
   title: string;
   description: string;
   insights: string[];
   recommendations: string[];
   confidence: number;
-  impact: keyof typeof ImpactLevel;
-  urgency: keyof typeof UrgencyLevel;
+  impact: string;
+  urgency: string;
 }
 
 /**
@@ -101,6 +101,23 @@ export class AIInsightsService {
   ): Promise<AIAnalysisDB[]> {
     try {
       logger.info(`Generating AI insights for account: ${socialAccountId}`);
+
+      // Check if we have recent AI insights (less than 12 hours old)
+      const recentInsights = await this.aiAnalysisRepo.executeQuery(
+        `SELECT * FROM ai_analysis 
+         WHERE social_account_id = $1 
+         AND created_at > NOW() - INTERVAL '12 hours'
+         AND is_active = true
+         ORDER BY created_at DESC`,
+        [socialAccountId]
+      );
+
+      if (recentInsights.length > 0) {
+        logger.info(`Using existing AI insights from ${recentInsights[0].created_at} (less than 12h old)`);
+        return recentInsights as AIAnalysisDB[];
+      }
+
+      logger.info('No recent AI insights found, generating new ones...');
 
       // Get recent account metrics for trend analysis
       const accountMetrics = await apifyService.getRecentAccountMetrics(
@@ -168,10 +185,12 @@ export class AIInsightsService {
       logger.info("Calling LLM for insight generation...");
       const response = await this.callLLM(this.systemPrompt, userPrompt);
 
-      // Parse JSON response from LLM
+      // Parse JSON response from LLM (handle markdown code blocks)
       let parsedResponse: LLMInsightResponse[];
       try {
-        parsedResponse = JSON.parse(response);
+        // Remove markdown code blocks if present
+        const cleanResponse = response.replace(/```json\n?/, '').replace(/```$/, '').trim();
+        parsedResponse = JSON.parse(cleanResponse);
       } catch (parseError) {
         logger.error("Failed to parse LLM response as JSON:", parseError);
         logger.debug("Raw LLM response:", response);
@@ -239,35 +258,39 @@ Return your analysis in the exact JSON format specified in your system instructi
     const oldest = accountMetrics[accountMetrics.length - 1];
 
     const followerGrowth = latest
-      ? latest.followers_count -
-        (oldest?.followers_count || latest.followers_count)
+      ? latest.followers -
+        (oldest?.followers || latest.followers)
       : 0;
     const avgEngagement =
       postMetrics.length > 0
-        ? postMetrics.reduce((sum, post) => sum + post.engagement_rate, 0) /
-          postMetrics.length
+        ? postMetrics.reduce((sum, post) => {
+            const rate = typeof post.engagement_rate === 'number' ? post.engagement_rate : 0;
+            return sum + rate;
+          }, 0) / postMetrics.length
         : 0;
 
     return `
 ACCOUNT OVERVIEW:
-- Current followers: ${latest?.followers_count || 0}
-- Following: ${latest?.following_count || 0}
-- Total posts: ${latest?.posts_count || 0}
+- Current followers: ${latest?.followers || 0}
+- Following: ${latest?.following || 0}
+- Total posts: ${latest?.total_posts || 0}
 - Follower growth: ${followerGrowth} over ${accountMetrics.length} data points
-- Average engagement rate: ${avgEngagement.toFixed(2)}%
+- Average engagement rate: ${avgEngagement.toFixed(4)}%
 
 RECENT POSTS PERFORMANCE (${postMetrics.length} posts):
 ${postMetrics
   .slice(0, 20)
   .map(
-    (post, i) =>
-      `Post ${i + 1}: ${post.likes_count} likes, ${post.comments_count} comments, ${post.engagement_rate.toFixed(2)}% engagement`,
+    (post, i) => {
+      const rate = typeof post.engagement_rate === 'number' ? post.engagement_rate : 0;
+      return `Post ${i + 1}: ${post.likes || 0} likes, ${post.comments || 0} comments, ${rate.toFixed(4)}% engagement`;
+    }
   )
   .join("\n")}
 
 ENGAGEMENT TRENDS:
-- Best performing post: ${Math.max(...postMetrics.map((p) => p.engagement_rate)).toFixed(2)}% engagement
-- Worst performing post: ${Math.min(...postMetrics.map((p) => p.engagement_rate)).toFixed(2)}% engagement
+- Best performing post: ${Math.max(...postMetrics.map((p) => typeof p.engagement_rate === 'number' ? p.engagement_rate : 0)).toFixed(4)}% engagement
+- Worst performing post: ${Math.min(...postMetrics.map((p) => typeof p.engagement_rate === 'number' ? p.engagement_rate : 0)).toFixed(4)}% engagement
 - Content types: ${this.analyzeContentTypes(postMetrics)}
 `;
   }
@@ -298,27 +321,26 @@ ENGAGEMENT TRENDS:
     insight: LLMInsightResponse,
     supportingData: any,
   ): Promise<AIAnalysisDB> {
-    const priority = this.calculatePriority(insight.impact, insight.urgency);
-    const score = this.calculateScore(
-      insight.confidence,
-      insight.impact,
-      insight.urgency,
-    );
+    // Priority and score will be calculated by database triggers
 
+    // Convert LLM response to database format
+    const explanation = `INSIGHTS:\n${insight.insights.map(i => `• ${i}`).join('\n')}\n\nRECOMMENDATIONS:\n${insight.recommendations.map(r => `• ${r}`).join('\n')}`;
+    
+    // Map LLM response types/categories to database enums
+    const dbType = this.mapToDbType(insight.type);
+    const dbCategory = this.mapToDbCategory(insight.category);
+    
     return this.aiAnalysisRepo.create({
       user_id: userId,
       social_account_id: socialAccountId,
-      type: insight.type,
-      category: insight.category,
+      type: dbType,
+      category: dbCategory,
       title: insight.title,
       description: insight.description,
-      insights: insight.insights,
-      recommendations: insight.recommendations,
-      confidence: insight.confidence,
-      impact: insight.impact,
-      urgency: insight.urgency,
-      priority,
-      score,
+      explanation: explanation,
+      confidence: Math.round(insight.confidence * 100), // Convert to integer 0-100
+      impact: insight.impact.toLowerCase(),
+      urgency: insight.urgency.toLowerCase(),
       is_active: true,
       valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Valid for 30 days
       supporting_data: supportingData,
@@ -326,45 +348,47 @@ ENGAGEMENT TRENDS:
         generatedAt: new Date(),
         version: "1.0",
         algorithm: "llm_generated",
-        llmModel: "placeholder", // Should be set when LLM integration is complete
+        llmModel: process.env.LLM_PROVIDER === 'openai' ? process.env.OPENAI_MODEL || 'gpt-4' : process.env.ANTHROPIC_MODEL || 'claude-3-sonnet',
+        originalType: insight.type,
+        originalCategory: insight.category,
+        originalInsights: insight.insights,
+        originalRecommendations: insight.recommendations,
       },
     });
   }
 
   /**
-   * Calculate priority level based on impact and urgency
+   * Map LLM insight type to database enum
    */
-  private calculatePriority(
-    impact: keyof typeof ImpactLevel,
-    urgency: keyof typeof UrgencyLevel,
-  ): keyof typeof PriorityLevel {
-    if (impact === "HIGH" && urgency === "HIGH") {
-      return "CRITICAL";
-    }
-    if (
-      (impact === "HIGH" && urgency === "MEDIUM") ||
-      (impact === "MEDIUM" && urgency === "HIGH")
-    ) {
-      return "HIGH";
-    }
-    if (impact === "MEDIUM" || urgency === "MEDIUM") {
-      return "MEDIUM";
-    }
-    return "LOW";
+  private mapToDbType(llmType: string): string {
+    const typeMap: Record<string, string> = {
+      'engagement_analysis': 'audience_engagement',
+      'growth_trend': 'growth_opportunity', 
+      'content_performance': 'content_optimization',
+      'posting_optimization': 'timing_optimization',
+      'performance': 'performance_trend',
+      'trend': 'performance_trend',
+      'opportunity': 'growth_opportunity',
+      'alert': 'risk_alert',
+    };
+    
+    return typeMap[llmType.toLowerCase()] || 'performance_trend';
   }
 
   /**
-   * Calculate numerical score for prioritization
+   * Map LLM insight category to database enum
    */
-  private calculateScore(
-    confidence: number,
-    impact: keyof typeof ImpactLevel,
-    urgency: keyof typeof UrgencyLevel,
-  ): number {
-    const impactWeight = impact === "HIGH" ? 3 : impact === "MEDIUM" ? 2 : 1;
-    const urgencyWeight = urgency === "HIGH" ? 3 : urgency === "MEDIUM" ? 2 : 1;
-    return Math.round((confidence * 100 * (impactWeight + urgencyWeight)) / 6);
+  private mapToDbCategory(llmCategory: string): string {
+    const categoryMap: Record<string, string> = {
+      'performance': 'engagement',
+      'optimization': 'strategy',
+      'audience': 'audience',
+    };
+    
+    return categoryMap[llmCategory.toLowerCase()] || llmCategory.toLowerCase();
   }
+
+  // Score is calculated by database trigger, no longer needed
 
   /**
    * Get active insights for a user

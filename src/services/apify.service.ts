@@ -3,7 +3,7 @@ import { Repository } from "../database/repository";
 import { logger } from "../logger";
 import { Platform } from "../types/models";
 
-// Interface for Instagram post data from Apify
+// Interface for Instagram post data from Apify (expanded to match actual API response)
 export interface InstagramPost {
   id: string;
   type: string;
@@ -14,6 +14,21 @@ export interface InstagramPost {
   displayUrl: string;
   timestamp: string;
   commentsCount: number;
+  // Rich data fields from actual Apify response
+  inputUrl?: string;
+  hashtags?: string[];
+  mentions?: string[];
+  dimensionsHeight?: number;
+  dimensionsWidth?: number;
+  images?: any[];
+  alt?: string;
+  firstComment?: string;
+  latestComments?: any[];
+  ownerFullName?: string;
+  ownerUsername?: string;
+  ownerId?: string;
+  isSponsored?: boolean;
+  childPosts?: any[];
 }
 
 // Interface for Instagram profile data from Apify
@@ -44,37 +59,57 @@ export class ApifyError extends Error {
   }
 }
 
-// Database interface for account metrics
+// Database interface for account metrics (aligned with actual schema)
 interface AccountMetricsDB {
   id: string;
   social_account_id: string;
-  followers_count: number;
-  following_count: number;
-  posts_count: number;
-  engagement_rate: number;
-  avg_likes: number;
-  avg_comments: number;
+  date: Date;
+  followers: number;
+  following: number;
+  total_posts: number;
+  avg_engagement_rate: number;
+  reach_growth: number;
+  follower_growth: number;
   collected_at: Date;
-  created_at: Date;
-  updated_at: Date;
 }
 
-// Database interface for post metrics
+// Database interface for post metrics (expanded schema with rich Apify data)
 interface PostMetricsDB {
   id: string;
+  content_id: string;
   social_account_id: string;
-  post_id: string;
   platform: string;
-  post_type: string;
-  content: string;
-  likes_count: number;
-  comments_count: number;
-  shares_count: number;
+  platform_post_id: string;
+  published_at: Date;
+  likes: number;
+  shares: number;
+  comments: number;
+  views: number;
+  reach: number;
+  impressions: number;
   engagement_rate: number;
-  posted_at: Date;
+  click_through_rate: number;
   collected_at: Date;
-  created_at: Date;
-  updated_at: Date;
+  // Rich Apify data fields
+  input_url: string;
+  post_url: string;
+  short_code: string;
+  caption: string;
+  alt_text: string;
+  post_type: string;
+  dimensions_height: number;
+  dimensions_width: number;
+  display_url: string;
+  hashtags: string[];
+  mentions: string[];
+  first_comment: string;
+  latest_comments: any[];
+  owner_full_name: string;
+  owner_username: string;
+  owner_id: string;
+  is_sponsored: boolean;
+  child_posts: any[];
+  images: any[];
 }
 
 /**
@@ -85,6 +120,7 @@ export class ApifyService {
   private client: ApifyClient;
   private accountMetricsRepo: Repository<AccountMetricsDB>;
   private postMetricsRepo: Repository<PostMetricsDB>;
+  private apifyResultsRepo: Repository<any>;
 
   constructor() {
     if (!process.env.APIFY_API_TOKEN) {
@@ -101,14 +137,63 @@ export class ApifyService {
       "account_metrics",
     );
     this.postMetricsRepo = new Repository<PostMetricsDB>("post_metrics");
+    this.apifyResultsRepo = new Repository("apify_results");
+  }
+
+  /**
+   * Parse raw Apify data back to InstagramProfile format
+   * @param rawData Raw Apify response data
+   * @returns Instagram profile data
+   */
+  private parseApifyDataToProfile(rawData: any): InstagramProfile {
+    const data = rawData;
+    const posts = (data.latestPosts || []).slice(0, 12);
+
+    return {
+      id: data.id,
+      username: data.username,
+      url: data.url,
+      fullName: data.fullName || data.username,
+      biography: data.biography || "",
+      followersCount: data.followersCount || 0,
+      followsCount: data.followsCount || 0,
+      postsCount: data.postsCount || 0,
+      private: Boolean(data.private),
+      verified: Boolean(data.verified),
+      profilePicUrl: data.profilePicUrl || "",
+      profilePicUrlHD: data.profilePicUrlHD || data.profilePicUrl || "",
+      latestPosts: posts.map((post: any) => ({
+        id: post.id,
+        shortCode: post.shortCode,
+        url: post.url,
+        displayUrl: post.displayUrl,
+        caption: post.caption || "",
+        likesCount: post.likesCount || 0,
+        commentsCount: post.commentsCount || 0,
+        timestamp: post.timestamp,
+        type: post.type || "Image",
+        hashtags: post.hashtags || [],
+        mentions: post.mentions || [],
+        location: post.location || null,
+        isVideo: post.type === "Video",
+        videoUrl: post.videoUrl || null,
+        engagement: {
+          likes: post.likesCount || 0,
+          comments: post.commentsCount || 0,
+          shares: 0,
+          saves: 0,
+        },
+      })),
+    };
   }
 
   /**
    * Scrape Instagram profile data using Apify
    * @param username Instagram username to scrape
+   * @param socialAccountId Optional social account ID to store raw results
    * @returns Instagram profile data
    */
-  async scrapeInstagramProfile(username: string): Promise<InstagramProfile> {
+  async scrapeInstagramProfile(username: string, socialAccountId?: string): Promise<InstagramProfile> {
     try {
       logger.info(`Starting Instagram scrape for username: ${username}`);
 
@@ -133,6 +218,20 @@ export class ApifyService {
       const { items } = await this.client
         .dataset(run.defaultDatasetId)
         .listItems();
+
+      // Store raw Apify results if socialAccountId provided
+      if (socialAccountId && items && items.length > 0) {
+        await this.apifyResultsRepo.create({
+          social_account_id: socialAccountId,
+          run_id: run.id,
+          actor_id: process.env.APIFY_INSTAGRAM_ACTOR,
+          username: username,
+          raw_data: items[0], // Store the complete raw response
+          processing_status: 'completed',
+          processed_at: new Date(),
+        });
+        logger.info(`Stored raw Apify results for run: ${run.id}`);
+      }
 
       if (!items || items.length === 0) {
         throw new ApifyError(`No profile found for username: ${username}`);
@@ -214,7 +313,25 @@ export class ApifyService {
         `Collecting Instagram metrics for account: ${socialAccountId} (${username})`,
       );
 
-      const profile = await this.scrapeInstagramProfile(username);
+      // Check if we have recent data (less than 12 hours old)
+      const recentResults = await this.apifyResultsRepo.executeQuery(
+        `SELECT * FROM apify_results 
+         WHERE social_account_id = $1 
+         AND created_at > NOW() - INTERVAL '12 hours'
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [socialAccountId]
+      );
+
+      let profile: InstagramProfile;
+
+      if (recentResults.length > 0) {
+        logger.info(`Using cached Apify data from ${recentResults[0].created_at} (less than 12h old)`);
+        profile = this.parseApifyDataToProfile(recentResults[0].raw_data);
+      } else {
+        logger.info('No recent data found, calling Apify API...');
+        profile = await this.scrapeInstagramProfile(username, socialAccountId);
+      }
 
       // Calculate engagement metrics
       const posts = profile.latestPosts;
@@ -233,19 +350,32 @@ export class ApifyService {
           )
         : 0;
 
-      // Store account metrics
-      await this.accountMetricsRepo.create({
-        social_account_id: socialAccountId,
-        followers_count: profile.followersCount,
-        following_count: profile.followsCount,
-        posts_count: profile.postsCount,
-        engagement_rate: engagementRate,
-        avg_likes: avgLikes,
-        avg_comments: avgComments,
-        collected_at: new Date(),
-      });
+      // Store account metrics (only if not exists within 12 hours)
+      const recentMetrics = await this.accountMetricsRepo.executeQuery(
+        `SELECT id FROM account_metrics 
+         WHERE social_account_id = $1 
+         AND collected_at > NOW() - INTERVAL '12 hours'`,
+        [socialAccountId]
+      );
 
-      // Store post metrics for recent posts
+      if (recentMetrics.length === 0) {
+        await this.accountMetricsRepo.create({
+          social_account_id: socialAccountId,
+          date: new Date(),
+          followers: profile.followersCount,
+          following: profile.followsCount,
+          total_posts: profile.postsCount,
+          avg_engagement_rate: engagementRate,
+          reach_growth: 0, // Not available from Apify
+          follower_growth: 0, // Not available from Apify
+          collected_at: new Date(),
+        });
+        logger.info('Created new account metrics entry');
+      } else {
+        logger.info('Account metrics already exist within 12h - skipping');
+      }
+
+      // Store post metrics for recent posts with rich data
       for (const post of posts) {
         const postEngagementRate = profile.followersCount
           ? Number(
@@ -257,18 +387,44 @@ export class ApifyService {
             )
           : 0;
 
+        // Generate a UUID for content_id (in a real app, this would link to a content table)
+        const contentId = require('crypto').randomUUID();
+
         await this.postMetricsRepo.create({
+          content_id: contentId,
           social_account_id: socialAccountId,
-          post_id: post.id,
+          platform_post_id: post.shortCode,
           platform: Platform.INSTAGRAM,
-          post_type: post.type,
-          content: post.caption,
-          likes_count: post.likesCount,
-          comments_count: post.commentsCount,
-          shares_count: 0, // Instagram doesn't provide shares count via Apify
+          published_at: new Date(post.timestamp),
+          likes: post.likesCount,
+          comments: post.commentsCount,
+          shares: 0, // Instagram doesn't provide shares count
+          views: 0,
+          reach: 0,
+          impressions: 0,
           engagement_rate: postEngagementRate,
-          posted_at: new Date(post.timestamp),
+          click_through_rate: 0,
           collected_at: new Date(),
+          // Rich Apify data
+          input_url: `https://www.instagram.com/${username}/`, // The original scraping URL
+          post_url: post.url,
+          short_code: post.shortCode,
+          caption: post.caption || '',
+          alt_text: post.alt || '',
+          post_type: post.type,
+          dimensions_height: post.dimensionsHeight || 0,
+          dimensions_width: post.dimensionsWidth || 0,
+          display_url: post.displayUrl,
+          hashtags: post.hashtags || [],
+          mentions: post.mentions || [],
+          first_comment: post.firstComment || '',
+          latest_comments: post.latestComments || [],
+          owner_full_name: post.ownerFullName || '',
+          owner_username: post.ownerUsername || username,
+          owner_id: post.ownerId || '',
+          is_sponsored: post.isSponsored || false,
+          child_posts: post.childPosts || [],
+          images: post.images || [],
         });
       }
 
@@ -312,7 +468,7 @@ export class ApifyService {
     limit: number = 20,
   ): Promise<PostMetricsDB[]> {
     return this.postMetricsRepo.executeQuery(
-      "SELECT * FROM post_metrics WHERE social_account_id = $1 ORDER BY posted_at DESC LIMIT $2",
+      "SELECT * FROM post_metrics WHERE social_account_id = $1 ORDER BY published_at DESC LIMIT $2",
       [socialAccountId, limit],
     );
   }
