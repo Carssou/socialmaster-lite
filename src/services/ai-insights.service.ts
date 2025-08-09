@@ -100,7 +100,9 @@ export class AIInsightsService {
     socialAccountId: string,
   ): Promise<AIAnalysisDB[]> {
     try {
-      logger.info(`AI INSIGHTS: Generating AI insights for account: ${socialAccountId}, user: ${userId}`);
+      logger.info(
+        `AI INSIGHTS: Generating AI insights for account: ${socialAccountId}, user: ${userId}`,
+      );
 
       // Check if we have recent AI insights (less than 12 hours old)
       const recentInsights = await this.aiAnalysisRepo.executeQuery(
@@ -109,33 +111,44 @@ export class AIInsightsService {
          AND created_at > NOW() - INTERVAL '12 hours'
          AND is_active = true
          ORDER BY created_at DESC`,
-        [socialAccountId]
+        [socialAccountId],
       );
 
-      logger.info(`AI INSIGHTS: Found ${recentInsights.length} recent insights (< 12h)`);
+      logger.info(
+        `AI INSIGHTS: Found ${recentInsights.length} recent insights (< 12h)`,
+      );
 
       if (recentInsights.length > 0) {
-        logger.info(`AI INSIGHTS: Using existing AI insights from ${recentInsights[0].created_at} (less than 12h old)`);
+        logger.info(
+          `AI INSIGHTS: Using existing AI insights from ${recentInsights[0].created_at} (less than 12h old)`,
+        );
         return recentInsights as AIAnalysisDB[];
       }
 
-      logger.info('AI INSIGHTS: No recent AI insights found, generating new ones...');
+      logger.info(
+        "AI INSIGHTS: No recent AI insights found, generating new ones...",
+      );
 
       // Get recent account metrics for trend analysis
-      logger.info('AI INSIGHTS: Fetching account metrics...');
-      const accountMetrics = await apifyService.instance.getRecentAccountMetrics(
-        socialAccountId,
-        30,
+      logger.info("AI INSIGHTS: Fetching account metrics...");
+      const accountMetrics =
+        await apifyService.instance.getRecentAccountMetrics(
+          socialAccountId,
+          30,
+        );
+      logger.info(
+        `AI INSIGHTS: Found ${accountMetrics.length} account metrics`,
       );
-      logger.info(`AI INSIGHTS: Found ${accountMetrics.length} account metrics`);
-      
+
       if (accountMetrics.length === 0) {
-        logger.error(`AI INSIGHTS: No account metrics found for analysis - account ${socialAccountId}`);
+        logger.error(
+          `AI INSIGHTS: No account metrics found for analysis - account ${socialAccountId}`,
+        );
         throw new ApiError("No account metrics found for analysis", 404);
       }
 
       // Get recent post metrics
-      logger.info('AI INSIGHTS: Fetching post metrics...');
+      logger.info("AI INSIGHTS: Fetching post metrics...");
       const postMetrics = await apifyService.instance.getRecentPostMetrics(
         socialAccountId,
         50,
@@ -145,11 +158,13 @@ export class AIInsightsService {
       // Log sample metrics for debugging
       if (accountMetrics.length > 0) {
         const latest = accountMetrics[0];
-        logger.info(`AI INSIGHTS: Latest metrics - Followers: ${latest?.followers}, Posts: ${latest?.total_posts}, Engagement: ${latest?.avg_engagement_rate}`);
+        logger.info(
+          `AI INSIGHTS: Latest metrics - Followers: ${latest?.followers}, Posts: ${latest?.total_posts}, Engagement: ${latest?.avg_engagement_rate}`,
+        );
       }
 
       // Generate insights using LLM
-      logger.info('AI INSIGHTS: Calling LLM to generate insights...');
+      logger.info("AI INSIGHTS: Calling LLM to generate insights...");
       const insights = await this.generateLLMInsights(
         accountMetrics,
         postMetrics,
@@ -158,7 +173,7 @@ export class AIInsightsService {
       logger.info(`AI INSIGHTS: LLM generated ${insights.length} raw insights`);
 
       // Store insights in database
-      logger.info('AI INSIGHTS: Storing insights in database...');
+      logger.info("AI INSIGHTS: Storing insights in database...");
       const storedInsights: AIAnalysisDB[] = [];
       for (const insight of insights) {
         logger.info(`AI INSIGHTS: Storing insight: ${insight.title}`);
@@ -183,12 +198,12 @@ export class AIInsightsService {
         `Failed to generate insights for account ${socialAccountId}:`,
         error,
       );
-      
+
       // Re-throw ApiErrors without modification to preserve status codes
       if (error instanceof ApiError) {
         throw error;
       }
-      
+
       // Only wrap non-ApiErrors as 500
       throw new ApiError(
         `Failed to generate insights for account: ${socialAccountId}`,
@@ -205,20 +220,29 @@ export class AIInsightsService {
     postMetrics: any[],
     socialAccountId: string,
   ): Promise<LLMInsightResponse[]> {
-    const userPrompt = await this.createUserPrompt(accountMetrics, postMetrics, socialAccountId);
+    const userPrompt = await this.createUserPrompt(
+      accountMetrics,
+      postMetrics,
+      socialAccountId,
+    );
 
     try {
       // Call LLM API to generate insights
       logger.info("AI INSIGHTS: Calling LLM for insight generation...");
-      logger.info(`AI INSIGHTS: User prompt length: ${userPrompt.length} characters`);
+      logger.info(
+        `AI INSIGHTS: User prompt length: ${userPrompt.length} characters`,
+      );
       const response = await this.callLLM(this.systemPrompt, userPrompt);
-      logger.info('AI INSIGHTS: LLM call completed successfully');
+      logger.info("AI INSIGHTS: LLM call completed successfully");
 
       // Parse JSON response from LLM (handle markdown code blocks)
       let parsedResponse: LLMInsightResponse[];
       try {
         // Remove markdown code blocks if present
-        const cleanResponse = response.replace(/```json\n?/, '').replace(/```$/, '').trim();
+        const cleanResponse = response
+          .replace(/```json\n?/, "")
+          .replace(/```$/, "")
+          .trim();
         parsedResponse = JSON.parse(cleanResponse);
       } catch (parseError) {
         logger.error("Failed to parse LLM response as JSON:", parseError);
@@ -264,8 +288,16 @@ export class AIInsightsService {
    * Create user prompt aligned with system prompt in instagram-insights.prompt.md
    * This method creates a concise user prompt that references the detailed system instructions
    */
-  private async createUserPrompt(accountMetrics: any[], postMetrics: any[], socialAccountId: string): Promise<string> {
-    const analysisData = await this.prepareAnalysisData(accountMetrics, postMetrics, socialAccountId);
+  private async createUserPrompt(
+    accountMetrics: any[],
+    postMetrics: any[],
+    socialAccountId: string,
+  ): Promise<string> {
+    const analysisData = await this.prepareAnalysisData(
+      accountMetrics,
+      postMetrics,
+      socialAccountId,
+    );
 
     return `Please analyze the following Instagram account data:
 
@@ -277,63 +309,63 @@ Return your analysis in the exact JSON format specified in your system instructi
   }
 
   /**
-   * Prepare COMPLETE RAW Apify data for LLM analysis by querying the database
+   * Prepare COMPLETE Apify data for LLM analysis from apify_posts table
    */
   private async prepareAnalysisData(
     accountMetrics: any[],
     postMetrics: any[],
     socialAccountId: string,
   ): Promise<string> {
-    // Query the complete raw Apify data from database
-    const rawApifyData = await this.aiAnalysisRepo.executeQuery(
-      `SELECT raw_data, username, created_at FROM apify_results 
-       WHERE social_account_id = $1 
-       ORDER BY created_at DESC 
-       LIMIT 1`,
-      [socialAccountId]
+    // Get social account username
+    const socialAccount = await this.aiAnalysisRepo.executeQuery(
+      `SELECT username FROM social_accounts WHERE id = $1`,
+      [socialAccountId],
     );
 
-    if (rawApifyData.length === 0) {
-      // No raw data found - trigger Apify sync first
-      logger.info('No raw Apify data found - triggering fresh sync...');
-      
-      // Get the username from social account
-      const socialAccount = await this.aiAnalysisRepo.executeQuery(
-        `SELECT username FROM social_accounts WHERE id = $1`,
-        [socialAccountId]
+    if (socialAccount.length === 0) {
+      throw new ApiError("Social account not found", 404);
+    }
+
+    const username = socialAccount[0].username;
+
+    // Query ALL posts from apify_posts table for this username
+    const posts = await this.aiAnalysisRepo.executeQuery(
+      `SELECT * FROM apify_posts 
+       WHERE profile_username = $1 
+       ORDER BY post_timestamp DESC, post_index`,
+      [username],
+    );
+
+    if (posts.length === 0) {
+      // No posts found - trigger Apify sync first
+      logger.info("No Apify posts found - triggering fresh sync...");
+
+      await apifyService.instance.collectInstagramMetrics(
+        socialAccountId,
+        username,
       );
-      
-      if (socialAccount.length === 0) {
-        throw new ApiError("Social account not found", 404);
-      }
-      
-      const username = socialAccount[0].username;
-      await apifyService.instance.collectInstagramMetrics(socialAccountId, username);
-      
-      // Now fetch the fresh data
-      const freshApifyData = await this.aiAnalysisRepo.executeQuery(
-        `SELECT raw_data, username, created_at FROM apify_results 
-         WHERE social_account_id = $1 
-         ORDER BY created_at DESC 
-         LIMIT 1`,
-        [socialAccountId]
+
+      // Now fetch the fresh posts
+      const freshPosts = await this.aiAnalysisRepo.executeQuery(
+        `SELECT * FROM apify_posts 
+         WHERE profile_username = $1 
+         ORDER BY post_timestamp DESC, post_index`,
+        [username],
       );
-      
-      if (freshApifyData.length === 0) {
+
+      if (freshPosts.length === 0) {
         throw new ApiError("Failed to collect Instagram data via Apify", 500);
       }
-      
-      const apifyResult = freshApifyData[0];
-      const filteredData = apifyResult.raw_data;
-      
+
+      const reconstructedData = this.reconstructApifyFormat(freshPosts);
+
       return `INSTAGRAM DATA FROM APIFY (FRESH SYNC):
 
-Username: ${filteredData.username}
-Scraped at: ${apifyResult.created_at}
-Posts included: ${filteredData.latestPosts?.length || 0}
+Username: ${reconstructedData.username}
+Posts included: ${reconstructedData.latestPosts?.length || 0}
 
 APIFY DATASET:
-${JSON.stringify(filteredData, null, 2)}
+${JSON.stringify(reconstructedData, null, 2)}
 
 This dataset includes relevant Instagram data for analysis:
 - Profile information (bio, verified status, follower counts)
@@ -345,20 +377,23 @@ This dataset includes relevant Instagram data for analysis:
 Analyze this dataset to provide specific, data-driven insights.`;
     }
 
-    const apifyResult = rawApifyData[0];
-    const filteredData = apifyResult.raw_data; // Data is already filtered during storage
-    
-    logger.info(`AI INSIGHTS: Sending pre-filtered Apify data: ${JSON.stringify(filteredData).length} characters`);
-    logger.info(`AI INSIGHTS: Total posts in dataset: ${filteredData.latestPosts?.length || 0}`);
-    
+    // Reconstruct the original nested JSON format AI expects
+    const reconstructedData = this.reconstructApifyFormat(posts);
+
+    logger.info(
+      `AI INSIGHTS: Sending reconstructed Apify data: ${JSON.stringify(reconstructedData).length} characters`,
+    );
+    logger.info(
+      `AI INSIGHTS: Total posts in dataset: ${reconstructedData.latestPosts?.length || 0}`,
+    );
+
     return `INSTAGRAM DATA FROM APIFY:
 
-Username: ${filteredData.username}
-Scraped at: ${apifyResult.created_at}
-Posts included: ${filteredData.latestPosts?.length || 0}
+Username: ${reconstructedData.username}
+Posts included: ${reconstructedData.latestPosts?.length || 0}
 
 APIFY DATASET:
-${JSON.stringify(filteredData, null, 2)}
+${JSON.stringify(reconstructedData, null, 2)}
 
 This dataset includes relevant Instagram data for analysis:
 - Profile information (bio, verified status, follower counts)
@@ -370,6 +405,67 @@ This dataset includes relevant Instagram data for analysis:
 Analyze this dataset to provide specific, data-driven insights.`;
   }
 
+  /**
+   * Reconstruct the original Apify JSON format from normalized apify_posts table data
+   */
+  private reconstructApifyFormat(posts: any[]): any {
+    if (posts.length === 0) {
+      // Return structure that matches expected format even when empty
+      return {
+        username: null,
+        followersCount: 0,
+        latestPosts: []
+      };
+    }
+
+    // Get profile data from first row (duplicated across all posts)
+    const firstPost = posts[0];
+    
+    return {
+      id: firstPost.profile_id,
+      url: firstPost.profile_url,
+      fbid: firstPost.profile_fbid,
+      private: firstPost.profile_private,
+      fullName: firstPost.profile_full_name,
+      inputUrl: firstPost.profile_input_url,
+      username: firstPost.profile_username,
+      verified: firstPost.profile_verified,
+      biography: firstPost.profile_biography,
+      hasChannel: firstPost.profile_has_channel,
+      postsCount: firstPost.profile_posts_count,
+      followersCount: firstPost.profile_followers_count,
+      followsCount: firstPost.profile_follows_count,
+      profilePicUrl: firstPost.profile_pic_url,
+      
+      // Reconstruct latestPosts array from all post rows
+      latestPosts: posts.map(post => ({
+        id: post.post_id,
+        alt: post.post_alt,
+        url: post.post_url,
+        type: post.post_type,
+        images: post.post_images,
+        caption: post.post_caption,
+        ownerId: post.post_owner_id,
+        hashtags: post.post_hashtags,
+        isPinned: post.post_is_pinned,
+        mentions: post.post_mentions,
+        timestamp: post.post_timestamp,
+        childPosts: post.post_child_posts,
+        likesCount: post.post_likes_count,
+        commentsCount: post.post_comments_count,
+        location: post.post_location,
+        videoViewCount: post.post_video_view_count,
+        videoPlayCount: post.post_video_play_count,
+        videoDurationMs: post.post_video_duration_ms,
+        accessibility: post.post_accessibility,
+        coauthorProducers: post.post_coauthor_producers,
+        fundraiser: post.post_fundraiser,
+        hasAudio: post.post_has_audio,
+        isVideo: post.post_is_video,
+        productType: post.post_product_type,
+      }))
+    };
+  }
 
   /**
    * Fallback method for processed data analysis
@@ -382,13 +478,15 @@ Analyze this dataset to provide specific, data-driven insights.`;
     const oldest = accountMetrics[accountMetrics.length - 1];
 
     const followerGrowth = latest
-      ? latest.followers -
-        (oldest?.followers || latest.followers)
+      ? latest.followers - (oldest?.followers || latest.followers)
       : 0;
     const avgEngagement =
       postMetrics.length > 0
         ? postMetrics.reduce((sum, post) => {
-            const rate = typeof post.engagement_rate === 'number' ? post.engagement_rate : 0;
+            const rate =
+              typeof post.engagement_rate === "number"
+                ? post.engagement_rate
+                : 0;
             return sum + rate;
           }, 0) / postMetrics.length
         : 0;
@@ -404,17 +502,16 @@ ACCOUNT OVERVIEW:
 RECENT POSTS PERFORMANCE (${postMetrics.length} posts):
 ${postMetrics
   .slice(0, 20)
-  .map(
-    (post, i) => {
-      const rate = typeof post.engagement_rate === 'number' ? post.engagement_rate : 0;
-      return `Post ${i + 1}: ${post.likes || 0} likes, ${post.comments || 0} comments, ${rate.toFixed(4)}% engagement`;
-    }
-  )
+  .map((post, i) => {
+    const rate =
+      typeof post.engagement_rate === "number" ? post.engagement_rate : 0;
+    return `Post ${i + 1}: ${post.likes || 0} likes, ${post.comments || 0} comments, ${rate.toFixed(4)}% engagement`;
+  })
   .join("\n")}
 
 ENGAGEMENT TRENDS:
-- Best performing post: ${Math.max(...postMetrics.map((p) => typeof p.engagement_rate === 'number' ? p.engagement_rate : 0)).toFixed(4)}% engagement
-- Worst performing post: ${Math.min(...postMetrics.map((p) => typeof p.engagement_rate === 'number' ? p.engagement_rate : 0)).toFixed(4)}% engagement
+- Best performing post: ${Math.max(...postMetrics.map((p) => (typeof p.engagement_rate === "number" ? p.engagement_rate : 0))).toFixed(4)}% engagement
+- Worst performing post: ${Math.min(...postMetrics.map((p) => (typeof p.engagement_rate === "number" ? p.engagement_rate : 0))).toFixed(4)}% engagement
 - Content types: ${this.analyzeContentTypes(postMetrics)}
 `;
   }
@@ -448,12 +545,12 @@ ENGAGEMENT TRENDS:
     // Priority and score will be calculated by database triggers
 
     // Convert LLM response to database format
-    const explanation = `INSIGHTS:\n${insight.insights.map(i => `• ${i}`).join('\n')}\n\nRECOMMENDATIONS:\n${insight.recommendations.map(r => `• ${r}`).join('\n')}`;
-    
+    const explanation = `INSIGHTS:\n${insight.insights.map((i) => `• ${i}`).join("\n")}\n\nRECOMMENDATIONS:\n${insight.recommendations.map((r) => `• ${r}`).join("\n")}`;
+
     // Use categories directly - system prompt is aligned with database schema
     const dbType = insight.type;
     const dbCategory = insight.category;
-    
+
     return this.aiAnalysisRepo.create({
       user_id: userId,
       social_account_id: socialAccountId,
@@ -472,7 +569,10 @@ ENGAGEMENT TRENDS:
         generatedAt: new Date(),
         version: "1.0",
         algorithm: "llm_generated",
-        llmModel: process.env.LLM_PROVIDER === 'openai' ? process.env.OPENAI_MODEL || 'gpt-4' : process.env.ANTHROPIC_MODEL || 'claude-3-sonnet',
+        llmModel:
+          process.env.LLM_PROVIDER === "openai"
+            ? process.env.OPENAI_MODEL || "gpt-4"
+            : process.env.ANTHROPIC_MODEL || "claude-3-sonnet",
         originalType: insight.type,
         originalCategory: insight.category,
         originalInsights: insight.insights,
@@ -480,7 +580,6 @@ ENGAGEMENT TRENDS:
       },
     });
   }
-
 
   // Score is calculated by database trigger, no longer needed
 
@@ -577,23 +676,31 @@ ENGAGEMENT TRENDS:
     });
 
     const content = response.choices[0]?.message?.content;
-    
+
     logger.info(`OPENAI RESPONSE: Full response object:`, {
       choices: response.choices?.length || 0,
       model: response.model,
       usage: response.usage,
-      firstChoiceFinishReason: response.choices[0]?.finish_reason
+      firstChoiceFinishReason: response.choices[0]?.finish_reason,
     });
-    
+
     if (!content) {
       logger.error(`OPENAI RESPONSE: Empty content! Full response:`, response);
       throw new ApiError("Empty response from OpenAI", 500);
     }
 
-    logger.info(`OPENAI RESPONSE: Content length: ${content.length} characters`);
-    logger.info(`OPENAI RESPONSE: First 500 characters:`, content.substring(0, 500));
-    logger.info(`OPENAI RESPONSE: Last 200 characters:`, content.substring(Math.max(0, content.length - 200)));
-    
+    logger.info(
+      `OPENAI RESPONSE: Content length: ${content.length} characters`,
+    );
+    logger.info(
+      `OPENAI RESPONSE: First 500 characters:`,
+      content.substring(0, 500),
+    );
+    logger.info(
+      `OPENAI RESPONSE: Last 200 characters:`,
+      content.substring(Math.max(0, content.length - 200)),
+    );
+
     return content;
   }
 

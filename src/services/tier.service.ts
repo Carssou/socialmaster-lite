@@ -130,14 +130,21 @@ export class TierService {
 
     // Get tier limits - ensure we have a valid tier
     const userTier = user?.tier || "free";
-    logger.debug(`Getting tier limits for user ${userId} with tier: ${userTier}`);
-    
+    logger.debug(
+      `Getting tier limits for user ${userId} with tier: ${userTier}`,
+    );
+
     const tierLimits = await this.getTierLimits(userTier);
 
     // Get current account count (active accounts only)
     const accountsRepository = new Repository<any>("social_accounts");
-    const userAccounts = await accountsRepository.findByField("user_id", userId);
-    const currentAccounts = userAccounts.filter((account: any) => account.is_active).length;
+    const userAccounts = await accountsRepository.findByField(
+      "user_id",
+      userId,
+    );
+    const currentAccounts = userAccounts.filter(
+      (account: any) => account.is_active,
+    ).length;
 
     return {
       maxAccounts: tierLimits.max_accounts,

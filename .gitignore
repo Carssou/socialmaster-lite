@@ -131,4 +131,13 @@ tmp/
 coverage/
 .nyc_output/
 
+# Database backups and schemas
 *.sql
+backup_*.sql
+
+# Sensitive business docs (keep README.md and CLAUDE.md)
+src/prompts/
+apify-fields-complete.md
+context.md
+foreign_key_constraints.md
+SIMPLIFICATION_*.md

@@ -170,7 +170,7 @@ export const Analytics: React.FC = () => {
                         Followers
                       </dt>
                       <dd className="mt-2 text-2xl font-bold text-gray-900">
-                        {latestMetrics.followersCount.toLocaleString()}
+                        {Number(latestMetrics.followersCount || 0).toLocaleString()}
                       </dd>
                     </div>
                     <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -178,7 +178,7 @@ export const Analytics: React.FC = () => {
                         Following
                       </dt>
                       <dd className="mt-2 text-2xl font-bold text-gray-900">
-                        {latestMetrics.followingCount.toLocaleString()}
+                        {Number(latestMetrics.followingCount || 0).toLocaleString()}
                       </dd>
                     </div>
                     <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -186,7 +186,7 @@ export const Analytics: React.FC = () => {
                         Posts
                       </dt>
                       <dd className="mt-2 text-2xl font-bold text-gray-900">
-                        {latestMetrics.postsCount.toLocaleString()}
+                        {Number(latestMetrics.postsCount || 0).toLocaleString()}
                       </dd>
                     </div>
                     <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -194,7 +194,7 @@ export const Analytics: React.FC = () => {
                         Engagement
                       </dt>
                       <dd className="mt-2 text-2xl font-bold text-blue-600">
-                        {(latestMetrics.engagementRate * 100).toFixed(2)}%
+                        {(Number(latestMetrics.engagementRate || 0) * 100).toFixed(2)}%
                       </dd>
                     </div>
                     <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -202,7 +202,7 @@ export const Analytics: React.FC = () => {
                         Avg Likes
                       </dt>
                       <dd className="mt-2 text-2xl font-bold text-gray-900">
-                        {Math.round(latestMetrics.avgLikes).toLocaleString()}
+                        {Math.round(Number(latestMetrics.avgLikes || 0)).toLocaleString()}
                       </dd>
                     </div>
                     <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -210,7 +210,7 @@ export const Analytics: React.FC = () => {
                         Avg Comments
                       </dt>
                       <dd className="mt-2 text-2xl font-bold text-gray-900">
-                        {Math.round(latestMetrics.avgComments).toLocaleString()}
+                        {Math.round(Number(latestMetrics.avgComments || 0)).toLocaleString()}
                       </dd>
                     </div>
                   </div>
