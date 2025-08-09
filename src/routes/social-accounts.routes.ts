@@ -3,6 +3,7 @@ import { body, param, validationResult } from "express-validator";
 import { authenticate } from "../middleware/auth.middleware";
 import socialAccountService from "../services/social-account.service";
 import apifyService from "../services/apify.service";
+import tierService from "../services/tier.service";
 import { ApiError } from "../utils/errors";
 import { logger } from "../logger";
 import { Platform } from "../types";
@@ -44,8 +45,10 @@ const checkValidationErrors = (req: Request): void => {
 router.get("/", authenticate, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
+    logger.info(`SOCIAL ACCOUNTS: Getting accounts for user: ${userId}`);
     
     const accounts = await socialAccountService.getUserAccounts(userId);
+    logger.info(`SOCIAL ACCOUNTS: Found ${accounts.length} accounts:`, accounts);
     
     // Map database columns to TypeScript model
     const mappedAccounts = accounts.map(account => ({
@@ -81,37 +84,6 @@ router.get("/", authenticate, async (req: Request, res: Response) => {
   }
 });
 
-/**
- * @route GET /api/social-accounts/usage
- * @desc Get user's account usage summary
- * @access Private
- */
-router.get("/usage", authenticate, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.id;
-    
-    const usage = await socialAccountService.getAccountUsageSummary(userId);
-
-    res.status(200).json({
-      success: true,
-      message: "Account usage retrieved successfully",
-      data: { usage },
-    });
-  } catch (error) {
-    if (error instanceof ApiError) {
-      res.status(error.statusCode).json({
-        success: false,
-        message: error.message,
-      });
-    } else {
-      logger.error("Get account usage error:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    }
-  }
-});
 
 /**
  * @route POST /api/social-accounts
@@ -177,6 +149,45 @@ router.post("/", authenticate, createAccountValidation, async (req: Request, res
       });
     } else {
       logger.error("Add social account error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+});
+
+/**
+ * @route GET /api/social-accounts/usage
+ * @desc Get account usage information for current user
+ * @access Private
+ */
+router.get("/usage", (req: Request, res: Response, next) => {
+  logger.info("USAGE ROUTE HIT - BEFORE AUTH");
+  next();
+}, authenticate, async (req: Request, res: Response) => {
+  logger.info("USAGE ENDPOINT HIT - START");
+  try {
+    const userId = req.user!.id;
+    logger.info(`Getting usage for user: ${userId}`);
+    
+    const usageData = await tierService.getAccountUsage(userId);
+    logger.info(`Usage data retrieved:`, usageData);
+
+    res.status(200).json({
+      success: true,
+      message: "Account usage retrieved successfully",
+      data: usageData,
+    });
+  } catch (error) {
+    logger.error("Get account usage error details:", error);
+    if (error instanceof ApiError) {
+      res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    } else {
+      logger.error("Get account usage error:", error);
       res.status(500).json({
         success: false,
         message: "Internal server error",

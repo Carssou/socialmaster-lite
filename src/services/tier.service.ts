@@ -109,6 +109,46 @@ export class TierService {
   }
 
   /**
+   * Get complete account usage information for a user
+   * @param userId User ID
+   * @returns Account usage data including limits, current count, and permissions
+   */
+  async getAccountUsage(userId: string): Promise<{
+    maxAccounts: number;
+    currentAccounts: number;
+    tier: string;
+    canAddMore: boolean;
+    remainingAccounts: number;
+  }> {
+    // Get user's tier
+    const userRepository = new Repository<any>("users");
+    const user = await userRepository.findById(userId);
+
+    if (!user) {
+      throw new ApiError("User not found", 404);
+    }
+
+    // Get tier limits - ensure we have a valid tier
+    const userTier = user?.tier || "free";
+    logger.debug(`Getting tier limits for user ${userId} with tier: ${userTier}`);
+    
+    const tierLimits = await this.getTierLimits(userTier);
+
+    // Get current account count (active accounts only)
+    const accountsRepository = new Repository<any>("social_accounts");
+    const userAccounts = await accountsRepository.findByField("user_id", userId);
+    const currentAccounts = userAccounts.filter((account: any) => account.is_active).length;
+
+    return {
+      maxAccounts: tierLimits.max_accounts,
+      currentAccounts,
+      tier: tierLimits.tier,
+      canAddMore: currentAccounts < tierLimits.max_accounts,
+      remainingAccounts: tierLimits.max_accounts - currentAccounts,
+    };
+  }
+
+  /**
    * Update user's tier
    * @param userId User ID
    * @param newTier New tier name

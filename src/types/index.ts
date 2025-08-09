@@ -117,7 +117,7 @@ export interface TierSettings extends BaseModel {
 // Tier limits response
 export interface TierLimits {
   tier: string;
-  maxAccounts: number;
+  max_accounts: number;
   description: string;
 }
 

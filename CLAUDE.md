@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+** NEVER USE HARD-CODED VALUES**
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
@@ -13,12 +15,14 @@ Instead of building custom scraping infrastructure, this version uses Apify's AP
 ## Core Commands
 
 ### Development
+
 - `npm run dev` - Start development server with automatic database setup and migrations
 - `npm run dev:no-migrate` - Start development server without migrations
 - `npm run build` - Compile TypeScript to JavaScript
 - `npm start` - Run production build
 
 ### Testing
+
 - `npm run test` - Run Jest unit tests
 - `npm run test:watch` - Run tests in watch mode
 - `npm run test:e2e` - Run Playwright end-to-end tests
@@ -26,11 +30,13 @@ Instead of building custom scraping infrastructure, this version uses Apify's AP
 - `npm run test:all` - Run all tests (unit + E2E)
 
 ### Code Quality
+
 - `npm run lint` - Check code with ESLint
 - `npm run lint:fix` - Fix ESLint issues automatically
 - `npm run format` - Format code with Prettier
 
 ### Database
+
 - `npm run db:migrate` - Run database migrations
 - `npm run db:migrate:up` - Run pending migrations
 - `npm run db:migrate:down` - Rollback last migration
@@ -38,6 +44,7 @@ Instead of building custom scraping infrastructure, this version uses Apify's AP
 - `npm run db:migrate:status` - Check migration status
 
 ### Docker
+
 - `npm run docker:up` - Start all Docker services
 - `npm run docker:down` - Stop all Docker services
 - `npm run docker:logs` - View Docker logs
@@ -45,27 +52,32 @@ Instead of building custom scraping infrastructure, this version uses Apify's AP
 ## Architecture Overview
 
 ### Database Layer
+
 - **PostgreSQL**: Primary database with connection pooling via `pgPool`
 - **Redis**: Caching and session management via `redisClient`
 - **Migrations**: Node-pg-migrate for schema management
 - **Repository Pattern**: Generic repository class in `src/database/repository.ts`
 
 ### Authentication
+
 - **JWT-based**: Access and refresh tokens
 - **Manual Approval**: New users require admin activation (`is_active: false` by default)
 - **Team-based**: Each user belongs to a team with role-based access
 - **Middleware**: `authenticate` and `optionalAuthenticate` in `src/middleware/auth.middleware.ts`
 
 ### Core Services
+
 - **AuthService** (`src/services/auth.service.ts`): User registration, login, token management
 - Database connection handling uses individual client connections to prevent hanging issues
 
 ### Type System
+
 - Comprehensive TypeScript types in `src/types/`
 - Enum-based constants for platforms, content types, subscription tiers
 - Database column names use snake_case, TypeScript models use camelCase
 
 ### Development Environment
+
 - Docker Compose setup with PostgreSQL, Redis, pgAdmin, and Redis Commander
 - Development script handles Docker startup and database initialization
 - Hot reloading with ts-node-dev
@@ -73,6 +85,7 @@ Instead of building custom scraping infrastructure, this version uses Apify's AP
 ## What Was Kept vs Removed
 
 ### ✅ Kept (The Good Foundation)
+
 - **Database schema and tables** - Well-designed domain models
 - **Authentication system** - JWT-based auth with proper middleware
 - **API routes structure** - Clean RESTful endpoints
@@ -81,6 +94,7 @@ Instead of building custom scraping infrastructure, this version uses Apify's AP
 - **Repository pattern** - Generic database abstraction
 
 ### ❌ Removed/Disabled (The Overengineering)
+
 - **Custom scraping system** - Complex CAPTCHA handling, browser fingerprinting
 - **Subscription tiers** - Enterprise/Premium features for a personal project
 - **Team management** - Permission matrices and team hierarchies
@@ -111,6 +125,7 @@ The application expects a `.env` file with database connection details, JWT secr
 For reference, there's a clean Apify integration example in `instagram-scraper.ts` - **use this as inspiration** for building the new simplified service:
 
 ### Pattern to Follow (from instagram-scraper.ts)
+
 - **Simple API calls**: Clean ApifyClient usage with proper error handling
 - **Type safety**: Well-defined interfaces (`InstagramProfile`, `InstagramPost`)
 - **Custom error classes**: `InstagramScraperError` for specific error handling
@@ -118,6 +133,7 @@ For reference, there's a clean Apify integration example in `instagram-scraper.t
 - **Batch processing**: Handle single usernames or arrays consistently
 
 ### Recommended Apify Service Structure
+
 ```typescript
 // New service to create: src/services/apify.service.ts
 export class ApifyService {
@@ -129,6 +145,7 @@ export class ApifyService {
 ```
 
 ### Environment Setup
+
 - Requires `APIFY_API_TOKEN` environment variable
 - Apify actor: `shu8hvrXbJbY3Eb9W` (Instagram Scraper)
 - Free tier provides $5/month credits (8-20 profiles)

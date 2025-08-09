@@ -1,8 +1,21 @@
 import { Router, Request, Response } from "express";
 import { body, validationResult } from "express-validator";
+import rateLimit from "express-rate-limit";
 import authService from "../services/auth.service";
 import { ApiError } from "../utils/errors";
 import { logger } from "../logger";
+
+// Rate limiting only for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 auth attempts per windowMs
+  message: {
+    success: false,
+    message: "Too many authentication attempts from this IP, please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = Router();
 
@@ -38,7 +51,7 @@ const checkValidationErrors = (req: Request): void => {
  * @desc Register a new user
  * @access Public
  */
-router.post("/register", registerValidation, async (req: Request, res: Response) => {
+router.post("/register", authLimiter, registerValidation, async (req: Request, res: Response) => {
   try {
     checkValidationErrors(req);
 
@@ -80,7 +93,7 @@ router.post("/register", registerValidation, async (req: Request, res: Response)
  * @desc Login user and get tokens
  * @access Public
  */
-router.post("/login", loginValidation, async (req: Request, res: Response) => {
+router.post("/login", authLimiter, loginValidation, async (req: Request, res: Response) => {
   try {
     checkValidationErrors(req);
 
