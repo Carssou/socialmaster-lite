@@ -168,21 +168,27 @@ export class ApifyService {
         url: post.url,
         displayUrl: post.displayUrl,
         caption: post.caption || "",
-        likesCount: post.likesCount || 0,
-        commentsCount: post.commentsCount || 0,
         timestamp: post.timestamp,
         type: post.type || "Image",
         hashtags: post.hashtags || [],
         mentions: post.mentions || [],
-        location: post.location || null,
+        location: post.location,
         isVideo: post.type === "Video",
-        videoUrl: post.videoUrl || null,
-        engagement: {
-          likes: post.likesCount || 0,
-          comments: post.commentsCount || 0,
-          shares: 0,
-          saves: 0,
-        },
+        images: post.images || [],
+        alt: post.alt || "",
+        childPosts: post.childPosts || [],
+        videoViewCount: post.videoViewCount,
+        videoPlayCount: post.videoPlayCount,
+        videoDurationMs: post.videoDurationMs,
+        accessibility: post.accessibility,
+        coauthorProducers: post.coauthorProducers,
+        fundraiser: post.fundraiser,
+        hasAudio: post.hasAudio,
+        productType: post.productType,
+        isPinned: post.isPinned,
+        ownerId: post.ownerId,
+        likesCount: post.likesCount,
+        commentsCount: post.commentsCount
       })),
     };
   }
@@ -215,22 +221,37 @@ export class ApifyService {
       const run = await this.client
         .actor(process.env.APIFY_INSTAGRAM_ACTOR)
         .call(input);
+      
+      logger.info(`APIFY: Run completed with ID: ${run.id}, status: ${run.status}`);
+      
       const { items } = await this.client
         .dataset(run.defaultDatasetId)
         .listItems();
+      
+      logger.info(`APIFY: Retrieved ${items?.length || 0} items from dataset`);
+      if (items && items.length > 0 && items[0]) {
+        logger.info(`APIFY: First item keys:`, Object.keys(items[0] as any));
+        logger.info(`APIFY: First item sample:`, {
+          username: (items[0] as any).username,
+          followersCount: (items[0] as any).followersCount,
+          private: (items[0] as any).private,
+          postsCount: (items[0] as any).postsCount
+        });
+      }
 
-      // Store raw Apify results if socialAccountId provided
+      // Store filtered Apify results if socialAccountId provided
       if (socialAccountId && items && items.length > 0) {
+        const filteredData = this.filterApifyDataForStorage(items[0]);
         await this.apifyResultsRepo.create({
           social_account_id: socialAccountId,
           run_id: run.id,
           actor_id: process.env.APIFY_INSTAGRAM_ACTOR,
           username: username,
-          raw_data: items[0], // Store the complete raw response
+          raw_data: filteredData, // Store only needed fields
           processing_status: 'completed',
           processed_at: new Date(),
         });
-        logger.info(`Stored raw Apify results for run: ${run.id}`);
+        logger.info(`Stored filtered Apify results for run: ${run.id} with ${filteredData.latestPosts?.length || 0} posts`);
       }
 
       if (!items || items.length === 0) {
@@ -240,22 +261,7 @@ export class ApifyService {
       const data = items[0] as any;
       const posts = (data.latestPosts || []).slice(0, 12);
 
-      // Calculate engagement metrics
-      const totalLikes = posts.reduce(
-        (sum: number, post: any) => sum + (post.likesCount || 0),
-        0,
-      );
-      const totalComments = posts.reduce(
-        (sum: number, post: any) => sum + (post.commentsCount || 0),
-        0,
-      );
-      const avgLikes = Math.round(totalLikes / posts.length) || 0;
-      const avgComments = Math.round(totalComments / posts.length) || 0;
-      const _engagementRate = data.followersCount
-        ? Number(
-            (((avgLikes + avgComments) / data.followersCount) * 100).toFixed(2),
-          )
-        : 0;
+      // NO ENGAGEMENT CALCULATIONS - USING RAW DATA ONLY
 
       const profile: InstagramProfile = {
         id: data.id,
@@ -273,13 +279,28 @@ export class ApifyService {
         latestPosts: posts.map((post: any) => ({
           id: post.id,
           type: post.type,
-          shortCode: post.shortCode,
           caption: post.caption || "",
-          likesCount: post.likesCount || 0,
           url: post.url,
-          displayUrl: post.displayUrl,
           timestamp: post.timestamp,
-          commentsCount: post.commentsCount || 0,
+          hashtags: post.hashtags || [],
+          mentions: post.mentions || [],
+          images: post.images || [],
+          alt: post.alt || "",
+          childPosts: post.childPosts || [],
+          location: post.location,
+          videoViewCount: post.videoViewCount,
+          videoPlayCount: post.videoPlayCount,
+          videoDurationMs: post.videoDurationMs,
+          accessibility: post.accessibility,
+          coauthorProducers: post.coauthorProducers,
+          fundraiser: post.fundraiser,
+          hasAudio: post.hasAudio,
+          isVideo: post.isVideo,
+          productType: post.productType,
+          isPinned: post.isPinned,
+          ownerId: post.ownerId,
+          likesCount: post.likesCount,
+          commentsCount: post.commentsCount
         })),
       };
 
@@ -333,103 +354,11 @@ export class ApifyService {
         profile = await this.scrapeInstagramProfile(username, socialAccountId);
       }
 
-      // Calculate engagement metrics
-      const posts = profile.latestPosts;
-      const totalLikes = posts.reduce((sum, post) => sum + post.likesCount, 0);
-      const totalComments = posts.reduce(
-        (sum, post) => sum + post.commentsCount,
-        0,
-      );
-      const avgLikes = Math.round(totalLikes / posts.length) || 0;
-      const avgComments = Math.round(totalComments / posts.length) || 0;
-      const engagementRate = profile.followersCount
-        ? Number(
-            (((avgLikes + avgComments) / profile.followersCount) * 100).toFixed(
-              2,
-            ),
-          )
-        : 0;
-
-      // Store account metrics (only if not exists within 12 hours)
-      const recentMetrics = await this.accountMetricsRepo.executeQuery(
-        `SELECT id FROM account_metrics 
-         WHERE social_account_id = $1 
-         AND collected_at > NOW() - INTERVAL '12 hours'`,
-        [socialAccountId]
-      );
-
-      if (recentMetrics.length === 0) {
-        await this.accountMetricsRepo.create({
-          social_account_id: socialAccountId,
-          date: new Date(),
-          followers: profile.followersCount,
-          following: profile.followsCount,
-          total_posts: profile.postsCount,
-          avg_engagement_rate: engagementRate,
-          reach_growth: 0, // Not available from Apify
-          follower_growth: 0, // Not available from Apify
-          collected_at: new Date(),
-        });
-        logger.info('Created new account metrics entry');
-      } else {
-        logger.info('Account metrics already exist within 12h - skipping');
-      }
-
-      // Store post metrics for recent posts with rich data
-      for (const post of posts) {
-        const postEngagementRate = profile.followersCount
-          ? Number(
-              (
-                ((post.likesCount + post.commentsCount) /
-                  profile.followersCount) *
-                100
-              ).toFixed(2),
-            )
-          : 0;
-
-        // Generate a UUID for content_id (in a real app, this would link to a content table)
-        const contentId = require('crypto').randomUUID();
-
-        await this.postMetricsRepo.create({
-          content_id: contentId,
-          social_account_id: socialAccountId,
-          platform_post_id: post.shortCode,
-          platform: Platform.INSTAGRAM,
-          published_at: new Date(post.timestamp),
-          likes: post.likesCount,
-          comments: post.commentsCount,
-          shares: 0, // Instagram doesn't provide shares count
-          views: 0,
-          reach: 0,
-          impressions: 0,
-          engagement_rate: postEngagementRate,
-          click_through_rate: 0,
-          collected_at: new Date(),
-          // Rich Apify data
-          input_url: `https://www.instagram.com/${username}/`, // The original scraping URL
-          post_url: post.url,
-          short_code: post.shortCode,
-          caption: post.caption || '',
-          alt_text: post.alt || '',
-          post_type: post.type,
-          dimensions_height: post.dimensionsHeight || 0,
-          dimensions_width: post.dimensionsWidth || 0,
-          display_url: post.displayUrl,
-          hashtags: post.hashtags || [],
-          mentions: post.mentions || [],
-          first_comment: post.firstComment || '',
-          latest_comments: post.latestComments || [],
-          owner_full_name: post.ownerFullName || '',
-          owner_username: post.ownerUsername || username,
-          owner_id: post.ownerId || '',
-          is_sponsored: post.isSponsored || false,
-          child_posts: post.childPosts || [],
-          images: post.images || [],
-        });
-      }
+      // Filtered raw data is already stored in apify_results table
+      // No additional processing needed
 
       logger.info(
-        `Successfully collected metrics for ${username}: ${posts.length} posts stored`,
+        `Successfully collected raw data for ${username}: ${profile.latestPosts.length} posts available`,
       );
     } catch (error) {
       logger.error(
@@ -471,6 +400,62 @@ export class ApifyService {
       "SELECT * FROM post_metrics WHERE social_account_id = $1 ORDER BY published_at DESC LIMIT $2",
       [socialAccountId, limit],
     );
+  }
+
+  /**
+   * Filter Apify data for storage - only keep needed fields, include ALL posts
+   */
+  private filterApifyDataForStorage(rawData: any): any {
+    // Profile-level fields to keep (based on apify-fields-complete.md)
+    const profileFields = {
+      id: rawData.id,
+      url: rawData.url,
+      fbid: rawData.fbid,
+      private: rawData.private,
+      fullName: rawData.fullName,
+      inputUrl: rawData.inputUrl,
+      username: rawData.username,
+      verified: rawData.verified,
+      biography: rawData.biography,
+      hasChannel: rawData.hasChannel,
+      postsCount: rawData.postsCount,
+      followersCount: rawData.followersCount,
+      followsCount: rawData.followsCount,
+      profilePicUrl: rawData.profilePicUrl,
+    };
+
+    // Filter ALL posts (not just first 12) to only include relevant fields
+    const filteredPosts = (rawData.latestPosts || []).map((post: any) => ({
+      id: post.id,
+      alt: post.alt,
+      url: post.url,
+      type: post.type,
+      images: post.images,
+      caption: post.caption,
+      ownerId: post.ownerId,
+      hashtags: post.hashtags,
+      isPinned: post.isPinned,
+      mentions: post.mentions,
+      timestamp: post.timestamp,
+      childPosts: post.childPosts,
+      likesCount: post.likesCount,
+      commentsCount: post.commentsCount,
+      location: post.location,
+      videoViewCount: post.videoViewCount,
+      videoPlayCount: post.videoPlayCount,
+      videoDurationMs: post.videoDurationMs,
+      accessibility: post.accessibility,
+      coauthorProducers: post.coauthorProducers,
+      fundraiser: post.fundraiser,
+      hasAudio: post.hasAudio,
+      isVideo: post.isVideo,
+      productType: post.productType,
+    }));
+
+    return {
+      ...profileFields,
+      latestPosts: filteredPosts
+    };
   }
 }
 

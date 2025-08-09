@@ -36,7 +36,7 @@ const checkValidationErrors = (req: Request): void => {
 
 /**
  * @route GET /api/analytics/accounts/:accountId/metrics
- * @desc Get metrics for a specific social account
+ * @desc Get basic metrics parsed from raw Apify data and AI insights
  * @access Private
  */
 router.get("/accounts/:accountId/metrics", authenticate, accountIdValidation, async (req: Request, res: Response) => {
@@ -49,34 +49,101 @@ router.get("/accounts/:accountId/metrics", authenticate, accountIdValidation, as
     // Verify user owns this account
     await socialAccountService.getAccount(accountId, userId);
     
-    // Get recent account metrics (use default limit)
-    const accountMetrics = await apifyService.instance.getRecentAccountMetrics(accountId);
-    
-    // Get recent post metrics  
-    const postMetrics = await apifyService.instance.getRecentPostMetrics(accountId, 20);
+    // Get raw Apify data to derive basic metrics  
+    const { Repository } = await import("../database/repository");
+    const apifyResultsRepo = new Repository("apify_results");
+    const rawApifyData = await apifyResultsRepo.executeQuery(
+      `SELECT raw_data, username, created_at FROM apify_results 
+       WHERE social_account_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [accountId]
+    );
 
-    res.status(200).json({
+    if (rawApifyData.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No data available - sync your account first to collect metrics",
+        data: {
+          metrics: [],
+          insights: [],
+          summary: {
+            requiresSync: true,
+            lastUpdated: null,
+          }
+        },
+      });
+    }
+
+    const apifyResult = rawApifyData[0];
+    const profileData = apifyResult.raw_data;
+    const posts = profileData.latestPosts || [];
+
+    // Parse basic metrics from raw data
+    const totalLikes = posts.reduce((sum: number, post: any) => sum + (post.likesCount || 0), 0);
+    const totalComments = posts.reduce((sum: number, post: any) => sum + (post.commentsCount || 0), 0);
+    const avgLikes = posts.length > 0 ? totalLikes / posts.length : 0;
+    const avgComments = posts.length > 0 ? totalComments / posts.length : 0;
+    
+    // Calculate engagement rate (likes + comments) / followers * 100
+    const totalEngagement = totalLikes + totalComments;
+    const avgEngagementPerPost = posts.length > 0 ? totalEngagement / posts.length : 0;
+    const engagementRate = profileData.followersCount > 0 ? 
+      (avgEngagementPerPost / profileData.followersCount) * 100 : 0;
+
+    // Create metrics in format expected by frontend
+    const basicMetrics = [{
+      followersCount: profileData.followersCount || 0,
+      followingCount: profileData.followsCount || 0,
+      postsCount: profileData.postsCount || 0,
+      avgLikes: avgLikes,
+      avgComments: avgComments,
+      engagementRate: engagementRate / 100, // Convert to decimal for frontend calculation
+      lastUpdated: apifyResult.created_at,
+      postsAnalyzed: posts.length,
+    }];
+
+    // Also get AI insights to return alongside basic metrics
+    let insights: any[] = [];
+    try {
+      insights = await aiInsightsService.generateAccountInsights(userId, accountId);
+    } catch (error) {
+      logger.info(`No AI insights available for account ${accountId}:`, error);
+    }
+
+    return res.status(200).json({
       success: true,
-      message: "Account metrics retrieved successfully",
+      message: "Account metrics and insights retrieved successfully",
       data: {
-        accountMetrics,
-        postMetrics,
+        metrics: basicMetrics,
+        insights: insights.map(insight => ({
+          id: insight.id,
+          type: insight.type,
+          category: insight.category,
+          title: insight.title,
+          description: insight.description,
+          recommendation: insight.explanation,
+          confidence: insight.confidence / 100, // Convert to decimal for frontend
+          priority: insight.impact,
+          createdAt: insight.created_at,
+        })),
         summary: {
-          totalAccountMetrics: accountMetrics.length,
-          totalPostMetrics: postMetrics.length,
-          lastUpdated: accountMetrics[0]?.collected_at || null,
+          totalMetrics: basicMetrics.length,
+          totalInsights: insights.length,
+          lastUpdated: apifyResult.created_at,
+          dataSource: "apify_raw",
         }
       },
     });
   } catch (error) {
     if (error instanceof ApiError) {
-      res.status(error.statusCode).json({
+      return res.status(error.statusCode).json({
         success: false,
         message: error.message,
       });
     } else {
       logger.error("Get account metrics error:", error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: "Internal server error",
       });
@@ -105,10 +172,14 @@ router.post("/accounts/:accountId/sync", authenticate, syncValidation, async (re
 
     logger.info(`Starting sync for Instagram account: ${account.username}`);
     
-    // Scrape fresh data from Instagram and store metrics automatically
-    const profileData = await apifyService.instance.scrapeInstagramProfile(account.username, accountId);
+    // Scrape fresh data from Instagram AND store metrics in database
+    await apifyService.instance.collectInstagramMetrics(accountId, account.username);
 
     logger.info(`Sync completed for Instagram account: ${account.username}`);
+
+    // Get the stored metrics to return in response
+    const accountMetrics = await apifyService.instance.getRecentAccountMetrics(accountId, 1);
+    const postMetrics = await apifyService.instance.getRecentPostMetrics(accountId, 10);
 
     res.status(200).json({
       success: true,
@@ -117,10 +188,10 @@ router.post("/accounts/:accountId/sync", authenticate, syncValidation, async (re
         username: account.username,
         syncedAt: new Date(),
         profileData: {
-          followersCount: profileData.followersCount,
-          followsCount: profileData.followsCount,
-          postsCount: profileData.postsCount,
-          latestPostsCount: profileData.latestPosts?.length || 0,
+          followersCount: accountMetrics[0]?.followers || 0,
+          followsCount: accountMetrics[0]?.following || 0,
+          postsCount: accountMetrics[0]?.total_posts || 0,
+          latestPostsCount: postMetrics.length || 0,
         }
       },
     });
@@ -159,7 +230,39 @@ router.get("/accounts/:accountId/insights", authenticate, insightsValidation, as
     logger.info(`Getting AI insights for account: ${accountId}, forceRefresh: ${forceRefresh}`);
     
     // Get insights (uses 12-hour cache unless forced)
-    const insights = await aiInsightsService.generateAccountInsights(userId, accountId);
+    let insights: any[] = [];
+    try {
+      insights = await aiInsightsService.generateAccountInsights(userId, accountId);
+    } catch (error: any) {
+      logger.info(`ANALYTICS ROUTE: Caught error generating insights:`, {
+        errorType: typeof error,
+        errorName: error?.name,
+        errorMessage: error?.message,
+        statusCode: error?.statusCode,
+        isApiError: error instanceof ApiError
+      });
+      
+      // If no metrics found, return empty insights with helpful message
+      if (error instanceof ApiError && error.statusCode === 404) {
+        logger.info(`No metrics found for account ${accountId}, returning empty insights`);
+        return res.status(200).json({
+          success: true,
+          message: "No insights available - sync your account first to collect data for analysis",
+          data: { 
+            insights: [],
+            summary: {
+              totalInsights: 0,
+              highImpact: 0,
+              mediumImpact: 0,
+              lowImpact: 0,
+              lastGenerated: null,
+              requiresSync: true,
+            }
+          },
+        });
+      }
+      throw error; // Re-throw other errors
+    }
     
     // Map database columns to TypeScript model
     const mappedInsights = insights.map(insight => ({
@@ -186,7 +289,7 @@ router.get("/accounts/:accountId/insights", authenticate, insightsValidation, as
       updatedAt: insight.updated_at,
     }));
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "AI insights retrieved successfully",
       data: { 
@@ -202,13 +305,13 @@ router.get("/accounts/:accountId/insights", authenticate, insightsValidation, as
     });
   } catch (error) {
     if (error instanceof ApiError) {
-      res.status(error.statusCode).json({
+      return res.status(error.statusCode).json({
         success: false,
         message: error.message,
       });
     } else {
       logger.error("Get AI insights error:", error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: "Internal server error",
       });

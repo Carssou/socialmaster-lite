@@ -130,3 +130,5 @@ tmp/
 # Testing
 coverage/
 .nyc_output/
+
+*.sql
