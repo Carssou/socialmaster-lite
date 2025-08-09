@@ -105,8 +105,8 @@ export interface CreateSocialAccountRequest {
 }
 
 export interface AccountMetrics {
-  id: string;
-  socialAccountId: string;
+  id?: string;
+  socialAccountId?: string;
   followersCount: number;
   followingCount: number;
   postsCount: number;
@@ -115,8 +115,10 @@ export interface AccountMetrics {
   avgComments: number;
   avgShares?: number;
   avgViews?: number;
-  createdAt: string;
-  updatedAt: string;
+  lastUpdated?: string;
+  postsAnalyzed?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AIInsight {

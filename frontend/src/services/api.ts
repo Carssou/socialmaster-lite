@@ -246,10 +246,20 @@ class ApiClient {
 
   // Analytics endpoints
   async getAccountMetrics(accountId: string): Promise<AccountMetrics[]> {
-    const response: AxiosResponse<ApiResponse<AccountMetrics[]>> = await this.client.get(
+    const response: AxiosResponse<ApiResponse<{ metrics: AccountMetrics[], insights: any[], summary: any }>> = await this.client.get(
       `/analytics/accounts/${accountId}/metrics`
     );
-    return response.data.data || [];
+    return response.data.data?.metrics || [];
+  }
+
+  async getAccountMetricsAndInsights(accountId: string): Promise<{ metrics: AccountMetrics[], insights: any[] }> {
+    const response: AxiosResponse<ApiResponse<{ metrics: AccountMetrics[], insights: any[], summary: any }>> = await this.client.get(
+      `/analytics/accounts/${accountId}/metrics`
+    );
+    return {
+      metrics: response.data.data?.metrics || [],
+      insights: response.data.data?.insights || []
+    };
   }
 
   async syncAccountData(accountId: string): Promise<ApiResponse> {

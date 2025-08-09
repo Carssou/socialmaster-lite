@@ -22,10 +22,14 @@ export const SocialAccounts: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      console.log('=== SOCIAL ACCOUNTS PAGE: Loading data ===');
       const [accountsData, usageData] = await Promise.all([
         apiClient.getSocialAccounts(),
         apiClient.getAccountUsage(),
       ]);
+      console.log('SOCIAL ACCOUNTS: Raw accounts data:', accountsData);
+      console.log('SOCIAL ACCOUNTS: Raw usage data:', usageData);
+      console.log('SOCIAL ACCOUNTS: Accounts length:', accountsData?.length);
       // Backend now returns proper camelCase, use directly
       setAccounts(accountsData || []);
       setUsage(usageData);
