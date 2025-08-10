@@ -136,6 +136,7 @@ export interface AIInsight {
   dataPoints?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+  isNew?: boolean; // Added to distinguish new vs previous insights
 }
 
 export interface TierLimits {

@@ -52,6 +52,12 @@ export const Analytics: React.FC = () => {
         setMetrics(metrics);
         setInsights(insights);
         
+        // Debug logging
+        console.log('ANALYTICS DEBUG: Total insights:', insights.length);
+        console.log('ANALYTICS DEBUG: New insights:', insights.filter(i => i.isNew).length);
+        console.log('ANALYTICS DEBUG: Previous insights:', insights.filter(i => !i.isNew).length);
+        console.log('ANALYTICS DEBUG: Sample insight:', insights[0]);
+        
         // If no metrics, show helpful message
         if (metrics.length === 0) {
           setError('No metrics data available. Sync your account to collect data from Instagram.');
@@ -229,10 +235,19 @@ export const Analytics: React.FC = () => {
                 </div>
 
                 {(insights?.length || 0) > 0 ? (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {insights
-                      .sort((a, b) => (b.confidence || 0) - (a.confidence || 0)) // Sort by confidence descending
-                      .map((insight) => (
+                  <div className="space-y-8">
+                    
+                    {/* New Insights Section */}
+                    {insights.filter(i => i.isNew).length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                          Latest Insights
+                        </h3>
+                        <div className="grid gap-6 md:grid-cols-2">
+                          {insights
+                            .filter(i => i.isNew)
+                            .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
+                            .map((insight) => (
                       <div key={insight.id} className="bg-white border rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
                         <div className="p-6">
                           <div className="flex items-start justify-between mb-4">
@@ -339,7 +354,138 @@ export const Analytics: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    ))}
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Previous Insights Section */}
+                    {insights.filter(i => !i.isNew).length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                          Previously Generated Insights
+                        </h3>
+                        <p className="text-sm text-gray-500 mb-4">
+                          Based on earlier data analysis
+                        </p>
+                        <div className="grid gap-6 md:grid-cols-2">
+                          {insights
+                            .filter(i => !i.isNew)
+                            .sort((a, b) => (b.confidence || 0) - (a.confidence || 0)) // Sort by confidence descending
+                            .map((insight) => (
+                      <div key={insight.id} className="bg-gray-50 border rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+                        <div className="p-6">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span
+                                  className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full ${
+                                    insight.priority === 'high'
+                                      ? 'bg-red-100 text-red-800'
+                                      : insight.priority === 'medium'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-green-100 text-green-800'
+                                  }`}
+                                >
+                                  {insight.priority}
+                                </span>
+                                <span className="text-xs text-gray-500 capitalize">
+                                  {insight.category}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  • Generated {new Date(insight.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                {insight.title}
+                              </h3>
+                              <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                                {insight.description}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {insight.recommendation && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                              <div className="flex items-start gap-2">
+                                <LightBulbIcon className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  {(() => {
+                                    // Parse the structured recommendation text
+                                    const sections = insight.recommendation.split(/\n(?=[A-Z]+:)/);
+                                    
+                                    return sections.map((section, index) => {
+                                      const lines = section.trim().split('\n');
+                                      const titleMatch = lines[0].match(/^([A-Z\s]+):\s*(.*)/);
+                                      
+                                      if (titleMatch) {
+                                        const [, title, firstContent] = titleMatch;
+                                        const restContent = lines.slice(1);
+                                        const allContent = [firstContent, ...restContent].filter(Boolean);
+                                        
+                                        return (
+                                          <div key={index} className={index > 0 ? "mt-4" : ""}>
+                                            <h4 className="text-xs font-semibold text-blue-900 uppercase tracking-wide mb-2">
+                                              {title.trim()}
+                                            </h4>
+                                            <div className="space-y-1">
+                                              {allContent.map((content, contentIndex) => {
+                                                // Check if it's a bullet point
+                                                if (content.trim().startsWith('•') || content.trim().startsWith('-')) {
+                                                  return (
+                                                    <div key={contentIndex} className="flex items-start gap-2">
+                                                      <span className="text-blue-600 text-xs mt-1">•</span>
+                                                      <p className="text-sm text-blue-800 leading-relaxed flex-1">
+                                                        {content.trim().replace(/^[•-]\s*/, '')}
+                                                      </p>
+                                                    </div>
+                                                  );
+                                                } else {
+                                                  return (
+                                                    <p key={contentIndex} className="text-sm text-blue-800 leading-relaxed">
+                                                      {content.trim()}
+                                                    </p>
+                                                  );
+                                                }
+                                              })}
+                                            </div>
+                                          </div>
+                                        );
+                                      } else {
+                                        // Fallback for sections without clear titles
+                                        return (
+                                          <div key={index} className={index > 0 ? "mt-4" : ""}>
+                                            <p className="text-sm text-blue-800 leading-relaxed">
+                                              {section.trim()}
+                                            </p>
+                                          </div>
+                                        );
+                                      }
+                                    });
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
+                            <span className={`font-medium ${
+                              (insight.confidence || 0) >= 0.8 
+                                ? 'text-green-600' 
+                                : (insight.confidence || 0) >= 0.6 
+                                ? 'text-yellow-600' 
+                                : 'text-gray-500'
+                            }`}>
+                              {Math.round((insight.confidence || 0) * 100)}% confidence
+                            </span>
+                            <span>{new Date(insight.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center">

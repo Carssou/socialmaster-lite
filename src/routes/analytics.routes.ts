@@ -137,19 +137,120 @@ router.get(
         },
       ];
 
-      // Also get AI insights to return alongside basic metrics
-      let insights: any[] = [];
-      try {
-        insights = await aiInsightsService.generateAccountInsights(
-          userId,
-          accountId,
-        );
-      } catch (error) {
+      // Check if we have recent scraping results (less than 12 hours old)
+      const apifyResultsRepo = new Repository("apify_results");
+      
+      const recentResults = await apifyResultsRepo.executeQuery(
+        `SELECT * FROM apify_results 
+         WHERE social_account_id = $1 
+         AND created_at > NOW() - INTERVAL '12 hours'
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [accountId],
+      );
+
+      const hasRecentScraping = recentResults.length > 0;
+
+      // If no recent scraping, trigger Apify scraper first
+      if (!hasRecentScraping) {
         logger.info(
-          `No AI insights available for account ${accountId}:`,
-          error,
+          `No recent scraping found for account ${accountId}, triggering Apify scraper...`,
+        );
+        try {
+          await apifyService.instance.collectInstagramMetrics(
+            accountId,
+            accountData.username,
+          );
+          logger.info(`Apify scraper completed for ${accountData.username}`);
+          
+          // Refetch posts with fresh data
+          const freshPosts = await apifyPostsRepo.executeQuery(
+            `SELECT * FROM apify_posts 
+             WHERE profile_username = $1 
+             ORDER BY post_timestamp DESC, post_index`,
+            [accountData.username],
+          );
+          
+          if (freshPosts.length > 0) {
+            // Update posts array with fresh data
+            posts.length = 0;
+            posts.push(...freshPosts);
+            logger.info(`Using fresh data: ${posts.length} posts`);
+          }
+        } catch (error) {
+          logger.warn(
+            `Failed to trigger Apify scraper for ${accountData.username}:`,
+            error,
+          );
+          // Continue with existing data even if scraping fails
+        }
+      } else {
+        logger.info(
+          `Found recent scraping from ${recentResults[0].created_at}, using existing data`,
         );
       }
+
+      // Always get existing insights first
+      let existingInsights: any[] = [];
+      try {
+        existingInsights = await aiInsightsService.getAccountInsights(accountId, 20);
+      } catch (error) {
+        logger.info(`No existing insights for account ${accountId}:`, error);
+      }
+
+      // Generate AI insights only if there was recent scraping (or we just scraped)
+      let newInsights: any[] = [];
+      
+      // Check again for recent scraping (in case we just created new results)
+      const currentResults = await apifyResultsRepo.executeQuery(
+        `SELECT * FROM apify_results 
+         WHERE social_account_id = $1 
+         AND created_at > NOW() - INTERVAL '12 hours'
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [accountId],
+      );
+      
+      if (currentResults.length > 0) {
+        try {
+          newInsights = await aiInsightsService.generateAccountInsights(
+            userId,
+            accountId,
+          );
+          logger.info(`Generated ${newInsights.length} new insights based on recent scraping from ${currentResults[0].created_at}`);
+        } catch (error) {
+          logger.info(
+            `Could not generate new insights for account ${accountId}:`,
+            error,
+          );
+        }
+      } else {
+        logger.info(`No recent scraping found, skipping AI insights generation for account ${accountId}`);
+      }
+
+      // Combine all insights
+      const allInsights = [...newInsights, ...existingInsights];
+      
+      // Remove duplicates by ID
+      const uniqueInsights = allInsights.filter((insight, index, arr) => 
+        arr.findIndex(i => i.id === insight.id) === index
+      );
+      
+      // Find the latest created_at date (truncated to date only)
+      const latestDate = uniqueInsights.length > 0 
+        ? uniqueInsights.reduce((latest, insight) => {
+            const insightDate = new Date(insight.created_at).toDateString();
+            const latestDateStr = new Date(latest).toDateString();
+            return insightDate > latestDateStr ? insight.created_at : latest;
+          }, uniqueInsights[0].created_at)
+        : null;
+      
+      const latestDateStr = latestDate ? new Date(latestDate).toDateString() : null;
+      
+      // Sort by creation date (newest first)
+      const insights = uniqueInsights.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
 
       return res.status(200).json({
         success: true,
@@ -166,12 +267,16 @@ router.get(
             confidence: insight.confidence / 100, // Convert to decimal for frontend
             priority: insight.impact,
             createdAt: insight.created_at,
+            isNew: latestDateStr && new Date(insight.created_at).toDateString() === latestDateStr, // Mark insights with latest creation date as "new"
           })),
           summary: {
             totalMetrics: basicMetrics.length,
             totalInsights: insights.length,
+            newInsights: insights.filter(i => latestDateStr && new Date(i.created_at).toDateString() === latestDateStr).length,
+            previousInsights: insights.filter(i => !latestDateStr || new Date(i.created_at).toDateString() !== latestDateStr).length,
             lastUpdated: posts[0].last_updated_at,
             dataSource: "apify_posts",
+            dataIsFresh: hasRecentScraping,
           },
         },
       });

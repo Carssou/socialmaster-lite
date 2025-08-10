@@ -328,10 +328,11 @@ Return your analysis in the exact JSON format specified in your system instructi
 
     const username = socialAccount[0].username;
 
-    // Query ALL posts from apify_posts table for this username
+    // Query ALL posts from apify_posts table for this username (excluding pinned posts)
     const posts = await this.aiAnalysisRepo.executeQuery(
       `SELECT * FROM apify_posts 
        WHERE profile_username = $1 
+       AND post_is_pinned = false
        ORDER BY post_timestamp DESC, post_index`,
       [username],
     );
@@ -345,10 +346,11 @@ Return your analysis in the exact JSON format specified in your system instructi
         username,
       );
 
-      // Now fetch the fresh posts
+      // Now fetch the fresh posts (excluding pinned posts)
       const freshPosts = await this.aiAnalysisRepo.executeQuery(
         `SELECT * FROM apify_posts 
          WHERE profile_username = $1 
+         AND post_is_pinned = false
          ORDER BY post_timestamp DESC, post_index`,
         [username],
       );
