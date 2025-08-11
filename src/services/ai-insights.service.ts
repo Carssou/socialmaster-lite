@@ -299,7 +299,12 @@ export class AIInsightsService {
       socialAccountId,
     );
 
+    const currentDateTime = new Date().toISOString();
+    
     return `Please analyze the following Instagram account data:
+
+CURRENT DATE/TIME: ${currentDateTime}
+IMPORTANT: When analyzing post performance, consider post age - recent posts (within 24-48 hours) need time to mature and should not be compared directly to older posts for performance evaluation.
 
 ${analysisData}
 
@@ -345,6 +350,10 @@ Return your analysis in the exact JSON format specified in your system instructi
         socialAccountId,
         username,
       );
+
+      // Wait for Apify data to be fully processed and inserted
+      logger.info("Waiting 60 seconds for Apify data to be fully processed...");
+      await new Promise(resolve => setTimeout(resolve, 60000));
 
       // Now fetch the fresh posts (excluding pinned posts)
       const freshPosts = await this.aiAnalysisRepo.executeQuery(

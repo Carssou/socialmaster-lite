@@ -236,16 +236,9 @@ router.get(
         arr.findIndex(i => i.id === insight.id) === index
       );
       
-      // Find the latest created_at date (truncated to date only)
-      const latestDate = uniqueInsights.length > 0 
-        ? uniqueInsights.reduce((latest, insight) => {
-            const insightDate = new Date(insight.created_at).toDateString();
-            const latestDateStr = new Date(latest).toDateString();
-            return insightDate > latestDateStr ? insight.created_at : latest;
-          }, uniqueInsights[0].created_at)
-        : null;
-      
-      const latestDateStr = latestDate ? new Date(latestDate).toDateString() : null;
+      // Find insights created within the last 12 hours
+      const now = new Date();
+      const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
       
       // Sort by creation date (newest first)
       const insights = uniqueInsights.sort((a, b) => 
@@ -267,13 +260,13 @@ router.get(
             confidence: insight.confidence / 100, // Convert to decimal for frontend
             priority: insight.impact,
             createdAt: insight.created_at,
-            isNew: latestDateStr && new Date(insight.created_at).toDateString() === latestDateStr, // Mark insights with latest creation date as "new"
+            isNew: new Date(insight.created_at) >= twelveHoursAgo, // Mark insights from last 12 hours as "new"
           })),
           summary: {
             totalMetrics: basicMetrics.length,
             totalInsights: insights.length,
-            newInsights: insights.filter(i => latestDateStr && new Date(i.created_at).toDateString() === latestDateStr).length,
-            previousInsights: insights.filter(i => !latestDateStr || new Date(i.created_at).toDateString() !== latestDateStr).length,
+            newInsights: insights.filter(i => new Date(i.created_at) >= twelveHoursAgo).length,
+            previousInsights: insights.filter(i => new Date(i.created_at) < twelveHoursAgo).length,
             lastUpdated: posts[0].last_updated_at,
             dataSource: "apify_posts",
             dataIsFresh: hasRecentScraping,
