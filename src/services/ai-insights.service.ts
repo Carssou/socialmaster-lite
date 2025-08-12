@@ -335,9 +335,15 @@ Return your analysis in the exact JSON format specified in your system instructi
 
     // Query ALL posts from apify_posts table for this username (excluding pinned posts)
     const posts = await this.aiAnalysisRepo.executeQuery(
-      `SELECT * FROM apify_posts 
+      `SELECT post_id, profile_posts_count, profile_followers_count, profile_follows_count,
+              post_alt, post_type, post_caption, post_hashtags, post_mentions, post_timestamp,
+              post_child_posts, post_likes_count, post_comments_count, post_location,
+              post_video_view_count, post_video_play_count, post_video_duration_ms,
+              post_coauthor_producers, post_fundraiser, post_has_audio, post_is_video
+       FROM apify_posts 
        WHERE profile_username = $1 
        AND post_is_pinned = false
+       AND profile_id = post_owner_id
        ORDER BY post_timestamp DESC, post_index`,
       [username],
     );
@@ -357,9 +363,15 @@ Return your analysis in the exact JSON format specified in your system instructi
 
       // Now fetch the fresh posts (excluding pinned posts)
       const freshPosts = await this.aiAnalysisRepo.executeQuery(
-        `SELECT * FROM apify_posts 
+        `SELECT post_id, profile_posts_count, profile_followers_count, profile_follows_count,
+                post_alt, post_type, post_caption, post_hashtags, post_mentions, post_timestamp,
+                post_child_posts, post_likes_count, post_comments_count, post_location,
+                post_video_view_count, post_video_play_count, post_video_duration_ms,
+                post_coauthor_producers, post_fundraiser, post_has_audio, post_is_video
+         FROM apify_posts 
          WHERE profile_username = $1 
          AND post_is_pinned = false
+         AND profile_id = post_owner_id
          ORDER BY post_timestamp DESC, post_index`,
         [username],
       );

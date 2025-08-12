@@ -141,3 +141,5 @@ apify-fields-complete.md
 context.md
 foreign_key_constraints.md
 SIMPLIFICATION_*.md
+PRPs/
+.claude/
