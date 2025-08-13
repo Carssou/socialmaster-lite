@@ -69,6 +69,36 @@ export function verifyRefreshToken(token: string): JWTPayload {
 }
 
 /**
+ * Convert JWT time string to seconds
+ */
+export function timeToSeconds(timeString: string): number {
+  // Handle numeric strings (assume seconds)
+  if (/^\d+$/.test(timeString)) {
+    return parseInt(timeString, 10);
+  }
+
+  // Handle time strings like "24h", "7d", "30m"
+  const match = timeString.match(/^(\d+)([hmd])$/);
+  if (!match) {
+    return parseInt(timeString, 10) || 86400; // Default to 24 hours
+  }
+
+  const [, number, unit] = match;
+  const value = parseInt(number || "0", 10);
+
+  switch (unit) {
+    case "h":
+      return value * 3600; // hours to seconds
+    case "d":
+      return value * 24 * 3600; // days to seconds
+    case "m":
+      return value * 60; // minutes to seconds
+    default:
+      return value;
+  }
+}
+
+/**
  * Extract token from authorization header
  */
 export function extractTokenFromHeader(authorization?: string): string | null {

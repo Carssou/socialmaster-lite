@@ -1,13 +1,15 @@
 // Generic repository for database operations
+import { Pool, PoolClient } from "pg";
 import { transaction, buildWhereClause, buildPaginationClause } from "./index";
 import { PaginatedResult, QueryParams } from "../types";
+import { pgPool } from "../database";
 
 /**
  * Generic repository class for database operations
  * @template T The entity type
  */
 export class Repository<T> {
-  private pgPool: any;
+  private pgPool: Pool;
 
   /**
    * Create a new repository
@@ -19,7 +21,6 @@ export class Repository<T> {
     private readonly primaryKey: string = "id",
   ) {
     // Initialize pgPool once in constructor
-    const { pgPool } = require("../database");
     this.pgPool = pgPool;
   }
 
@@ -143,7 +144,7 @@ export class Repository<T> {
    * @param value The field value
    * @returns Array of matching entities
    */
-  async findByField(field: string, value: any): Promise<T[]> {
+  async findByField(field: string, value: unknown): Promise<T[]> {
     const sql = `
       SELECT *
       FROM ${this.tableName}
@@ -309,7 +310,10 @@ export class Repository<T> {
    * @param params Query parameters
    * @returns Query result
    */
-  async executeQuery<R = any>(sql: string, params: any[] = []): Promise<R[]> {
+  async executeQuery<R = unknown>(
+    sql: string,
+    params: unknown[] = [],
+  ): Promise<R[]> {
     // Use client connection to avoid hanging
     const client = await this.pgPool.connect();
     let result;
@@ -326,8 +330,8 @@ export class Repository<T> {
    * @param callback Transaction callback
    * @returns Transaction result
    */
-  async executeTransaction<R = any>(
-    callback: (client: any) => Promise<R>,
+  async executeTransaction<R = unknown>(
+    callback: (client: PoolClient) => Promise<R>,
   ): Promise<R> {
     return transaction<R>(callback);
   }

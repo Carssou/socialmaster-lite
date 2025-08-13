@@ -1,5 +1,5 @@
 // Database utilities and helpers
-import { QueryResult } from "pg";
+import { QueryResult, PoolClient } from "pg";
 import { pgPool } from "../database";
 
 /**
@@ -10,10 +10,16 @@ import { pgPool } from "../database";
  */
 export const query = async <T>(
   text: string,
-  params: any[] = [],
+  params: unknown[] = [],
 ): Promise<T[]> => {
-  // SIMPLIFIED VERSION - Just pass through to pgPool without logging
-  const result: QueryResult = await pgPool.query(text, params);
+  // Use individual client connection to prevent hanging
+  const client = await pgPool.connect();
+  let result: QueryResult;
+  try {
+    result = await client.query(text, params);
+  } finally {
+    client.release();
+  }
   return result.rows as T[];
 
   /* ORIGINAL CODE - COMMENTED OUT DUE TO HANGING:
@@ -46,7 +52,7 @@ export const query = async <T>(
  * @returns Result of the callback function
  */
 export const transaction = async <T>(
-  callback: (client: any) => Promise<T>,
+  callback: (client: PoolClient) => Promise<T>,
 ): Promise<T> => {
   const client = await pgPool.connect();
   try {
@@ -68,7 +74,7 @@ export const transaction = async <T>(
  * @returns Array of query results
  */
 export const batchQuery = async <T>(
-  queries: { text: string; params?: any[] }[],
+  queries: { text: string; params?: unknown[] }[],
 ): Promise<T[][]> => {
   return transaction(async (client) => {
     const results: T[][] = [];
@@ -87,9 +93,9 @@ export const batchQuery = async <T>(
  * @returns Object with text and values
  */
 export const createInClause = (
-  values: any[],
+  values: unknown[],
   startIndex = 1,
-): { text: string; values: any[] } => {
+): { text: string; values: unknown[] } => {
   if (!values.length) {
     return { text: "(NULL)", values: [] };
   }
@@ -108,11 +114,11 @@ export const createInClause = (
  * @returns Object with clause text and values array
  */
 export const buildWhereClause = (
-  filters: Record<string, any>,
+  filters: Record<string, unknown>,
   startIndex = 1,
-): { text: string; values: any[] } => {
+): { text: string; values: unknown[] } => {
   const clauses: string[] = [];
-  const values: any[] = [];
+  const values: unknown[] = [];
   let paramIndex = startIndex;
 
   Object.entries(filters).forEach(([key, value]) => {
@@ -149,7 +155,7 @@ export const buildPaginationClause = (
   page: number,
   limit: number,
   startIndex = 1,
-): { text: string; values: any[] } => {
+): { text: string; values: unknown[] } => {
   const offset = (page - 1) * limit;
   return {
     text: `LIMIT $${startIndex} OFFSET $${startIndex + 1}`,
@@ -165,7 +171,7 @@ export const buildPaginationClause = (
  */
 export const getTotalCount = async (
   table: string,
-  whereClause: { text: string; values: any[] } = { text: "", values: [] },
+  whereClause: { text: string; values: unknown[] } = { text: "", values: [] },
 ): Promise<number> => {
   const countQuery = `
     SELECT COUNT(*) as total
@@ -185,7 +191,7 @@ export const getTotalCount = async (
  */
 export const recordExists = async (
   table: string,
-  conditions: Record<string, any>,
+  conditions: Record<string, unknown>,
 ): Promise<boolean> => {
   const whereClause = buildWhereClause(conditions);
   const existsQuery = `

@@ -5,7 +5,11 @@ import {
   UserLoginDto,
   AuthResponse,
 } from "../types/models";
-import { generateToken, generateRefreshToken } from "../utils/jwt";
+import {
+  generateToken,
+  generateRefreshToken,
+  timeToSeconds,
+} from "../utils/jwt";
 import { hashPassword, comparePassword } from "../utils/password";
 import { logger } from "../logger";
 import { ApiError } from "../utils/errors";
@@ -79,7 +83,7 @@ export class AuthService {
       },
       accessToken: token,
       refreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
+      expiresIn: timeToSeconds(process.env.JWT_EXPIRES_IN || "86400"),
     };
   }
 
@@ -143,7 +147,7 @@ export class AuthService {
       },
       accessToken: token,
       refreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
+      expiresIn: timeToSeconds(process.env.JWT_EXPIRES_IN || "86400"),
     };
   }
 
@@ -165,7 +169,7 @@ export class AuthService {
     return {
       token: newToken,
       refreshToken: newRefreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
+      expiresIn: timeToSeconds(process.env.JWT_EXPIRES_IN || "86400"),
     };
   }
 

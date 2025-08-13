@@ -1,14 +1,15 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { setTimeout } from "timers";
 import { Repository } from "../database/repository";
 import { ApiError } from "../utils/errors";
 import { logger } from "../logger";
-import {
-  InsightType,
-  InsightCategory,
-  ImpactLevel,
-  UrgencyLevel,
-} from "../types/models";
+// import {
+//   InsightType,
+//   InsightCategory,
+//   ImpactLevel,
+//   UrgencyLevel,
+// } from "../types/models";
 import apifyService from "./apify.service";
 
 // Database interface for AI analysis
@@ -105,14 +106,14 @@ export class AIInsightsService {
       );
 
       // Check if we have recent AI insights (less than 12 hours old)
-      const recentInsights = await this.aiAnalysisRepo.executeQuery(
+      const recentInsights = (await this.aiAnalysisRepo.executeQuery(
         `SELECT * FROM ai_analysis 
          WHERE social_account_id = $1 
          AND created_at > NOW() - INTERVAL '12 hours'
          AND is_active = true
          ORDER BY created_at DESC`,
         [socialAccountId],
-      );
+      )) as AIAnalysisDB[];
 
       logger.info(
         `AI INSIGHTS: Found ${recentInsights.length} recent insights (< 12h)`,
@@ -120,7 +121,7 @@ export class AIInsightsService {
 
       if (recentInsights.length > 0) {
         logger.info(
-          `AI INSIGHTS: Using existing AI insights from ${recentInsights[0].created_at} (less than 12h old)`,
+          `AI INSIGHTS: Using existing AI insights from ${recentInsights[0]!.created_at} (less than 12h old)`,
         );
         return recentInsights as AIAnalysisDB[];
       }
@@ -300,7 +301,7 @@ export class AIInsightsService {
     );
 
     const currentDateTime = new Date().toISOString();
-    
+
     return `Please analyze the following Instagram account data:
 
 CURRENT DATE/TIME: ${currentDateTime}
@@ -322,20 +323,20 @@ Return your analysis in the exact JSON format specified in your system instructi
     socialAccountId: string,
   ): Promise<string> {
     // Get social account username
-    const socialAccount = await this.aiAnalysisRepo.executeQuery(
+    const socialAccount = (await this.aiAnalysisRepo.executeQuery(
       `SELECT username FROM social_accounts WHERE id = $1`,
       [socialAccountId],
-    );
+    )) as { username: string }[];
 
     if (socialAccount.length === 0) {
       throw new ApiError("Social account not found", 404);
     }
 
-    const username = socialAccount[0].username;
+    const username = socialAccount[0]!.username;
 
     // Query ALL posts from apify_posts table for this username (excluding pinned posts)
     const posts = await this.aiAnalysisRepo.executeQuery(
-      `SELECT post_id, profile_posts_count, profile_followers_count, profile_follows_count,
+      `SELECT profile_posts_count, profile_followers_count, profile_follows_count,
               post_alt, post_type, post_caption, post_hashtags, post_mentions, post_timestamp,
               post_child_posts, post_likes_count, post_comments_count, post_location,
               post_video_view_count, post_video_play_count, post_video_duration_ms,
@@ -359,11 +360,11 @@ Return your analysis in the exact JSON format specified in your system instructi
 
       // Wait for Apify data to be fully processed and inserted
       logger.info("Waiting 60 seconds for Apify data to be fully processed...");
-      await new Promise(resolve => setTimeout(resolve, 60000));
+      await new Promise((resolve) => setTimeout(resolve, 60000));
 
       // Now fetch the fresh posts (excluding pinned posts)
       const freshPosts = await this.aiAnalysisRepo.executeQuery(
-        `SELECT post_id, profile_posts_count, profile_followers_count, profile_follows_count,
+        `SELECT profile_posts_count, profile_followers_count, profile_follows_count,
                 post_alt, post_type, post_caption, post_hashtags, post_mentions, post_timestamp,
                 post_child_posts, post_likes_count, post_comments_count, post_location,
                 post_video_view_count, post_video_play_count, post_video_duration_ms,
@@ -437,13 +438,13 @@ Analyze this dataset to provide specific, data-driven insights.`;
       return {
         username: null,
         followersCount: 0,
-        latestPosts: []
+        latestPosts: [],
       };
     }
 
     // Get profile data from first row (duplicated across all posts)
     const firstPost = posts[0];
-    
+
     return {
       id: firstPost.profile_id,
       url: firstPost.profile_url,
@@ -459,9 +460,9 @@ Analyze this dataset to provide specific, data-driven insights.`;
       followersCount: firstPost.profile_followers_count,
       followsCount: firstPost.profile_follows_count,
       profilePicUrl: firstPost.profile_pic_url,
-      
+
       // Reconstruct latestPosts array from all post rows
-      latestPosts: posts.map(post => ({
+      latestPosts: posts.map((post) => ({
         id: post.post_id,
         alt: post.post_alt,
         url: post.post_url,
@@ -486,7 +487,7 @@ Analyze this dataset to provide specific, data-driven insights.`;
         hasAudio: post.post_has_audio,
         isVideo: post.post_is_video,
         productType: post.post_product_type,
-      }))
+      })),
     };
   }
 

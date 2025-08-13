@@ -86,7 +86,8 @@ describe('SocialAccountService', () => {
       expect(accounts.length).toBeGreaterThan(0);
       
       const account = accounts[0];
-      expect(account.user_id).toBe(testUserId);
+      expect(account).toBeDefined();
+      expect(account?.user_id).toBe(testUserId);
     });
 
     test('should get active user accounts', async () => {
@@ -114,7 +115,8 @@ describe('SocialAccountService', () => {
 
     test('should get specific account with ownership check', async () => {
       const accounts = await socialAccountService.getUserAccounts(testUserId);
-      const accountId = accounts[0].id;
+      expect(accounts.length).toBeGreaterThan(0);
+      const accountId = accounts[0]!.id;
       
       const account = await socialAccountService.getAccount(accountId, testUserId);
       
@@ -125,7 +127,8 @@ describe('SocialAccountService', () => {
 
     test('should fail to get account with wrong user', async () => {
       const accounts = await socialAccountService.getUserAccounts(testUserId);
-      const accountId = accounts[0].id;
+      expect(accounts.length).toBeGreaterThan(0);
+      const accountId = accounts[0]!.id;
       const fakeUserId = 'fake-user-id';
       
       await expect(socialAccountService.getAccount(accountId, fakeUserId))
@@ -144,7 +147,8 @@ describe('SocialAccountService', () => {
   describe('Account Deactivation', () => {
     test('should deactivate account', async () => {
       const accounts = await socialAccountService.getUserAccounts(testUserId);
-      const accountId = accounts[0].id;
+      expect(accounts.length).toBeGreaterThan(0);
+      const accountId = accounts[0]!.id;
       
       await socialAccountService.deactivateAccount(accountId, testUserId);
       

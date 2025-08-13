@@ -1,7 +1,7 @@
 import { ApifyClient } from "apify-client";
 import { Repository } from "../database/repository";
 import { logger } from "../logger";
-import { Platform } from "../types/models";
+// import { Platform } from "../types/models";
 
 // Interface for Instagram post data from Apify (expanded to match actual API response)
 export interface InstagramPost {
@@ -113,7 +113,17 @@ interface PostMetricsDB {
 }
 
 // Database interface for apify_posts table
-interface ApifyPostDB {
+// Database interface for apify_results table
+export interface ApifyResultDB {
+  id: string;
+  social_account_id: string;
+  created_at: Date;
+  updated_at: Date;
+  status: string;
+  result_data?: any;
+}
+
+export interface ApifyPostDB {
   post_id: string; // PRIMARY KEY - Instagram post ID
   apify_result_id: string;
   post_index: number;
@@ -256,10 +266,10 @@ export class ApifyService {
   private async reconstructProfileFromPosts(
     apifyResultId: string,
   ): Promise<InstagramProfile> {
-    const posts = await this.apifyPostsRepo.executeQuery(
+    const posts = (await this.apifyPostsRepo.executeQuery(
       "SELECT * FROM apify_posts WHERE apify_result_id = $1 ORDER BY post_index",
       [apifyResultId],
-    );
+    )) as ApifyPostDB[];
 
     if (posts.length === 0) {
       throw new ApifyError(
@@ -268,7 +278,7 @@ export class ApifyService {
     }
 
     // Get profile data from the first post (since it's duplicated in all rows)
-    const firstPost = posts[0];
+    const firstPost = posts[0]!;
 
     const profile: InstagramProfile = {
       id: firstPost.profile_id,
@@ -291,7 +301,7 @@ export class ApifyService {
         likesCount: post.post_likes_count || 0,
         url: post.post_url,
         displayUrl: "", // Not stored in our schema
-        timestamp: post.post_timestamp,
+        timestamp: post.post_timestamp ? post.post_timestamp.toISOString() : "",
         commentsCount: post.post_comments_count || 0,
         inputUrl: firstPost.profile_input_url,
         hashtags: post.post_hashtags || [],
@@ -387,9 +397,10 @@ export class ApifyService {
         // UPSERT each post in apify_posts with profile data duplicated
         for (let i = 0; i < posts.length; i++) {
           const post = posts[i];
-          
+
           // Use raw SQL for UPSERT (ON CONFLICT) behavior
-          await this.apifyPostsRepo.executeQuery(`
+          await this.apifyPostsRepo.executeQuery(
+            `
             INSERT INTO apify_posts (
               post_id, apify_result_id, post_index,
               profile_id, profile_url, profile_fbid, profile_private, profile_full_name, 
@@ -449,20 +460,50 @@ export class ApifyService {
               post_product_type = EXCLUDED.post_product_type,
               last_updated_at = NOW(),
               scrape_count = apify_posts.scrape_count + 1
-          `, [
-            post.id, apifyResult.id, i,
-            data.id, data.url, data.fbid, Boolean(data.private), data.fullName,
-            data.inputUrl, data.username, Boolean(data.verified), data.biography,
-            Boolean(data.hasChannel), data.postsCount, data.followersCount,
-            data.followsCount, data.profilePicUrl,
-            post.alt, post.url, post.type, JSON.stringify(post.images || []), post.caption, post.ownerId,
-            JSON.stringify(post.hashtags || []), Boolean(post.isPinned), JSON.stringify(post.mentions || []), 
-            post.timestamp ? new Date(post.timestamp) : null, JSON.stringify(post.childPosts || []),
-            post.likesCount, post.commentsCount, JSON.stringify(post.location), post.videoViewCount,
-            post.videoPlayCount, post.videoDurationMs, post.accessibility,
-            JSON.stringify(post.coauthorProducers || []), JSON.stringify(post.fundraiser), 
-            Boolean(post.hasAudio), Boolean(post.isVideo), post.productType
-          ]);
+          `,
+            [
+              post.id,
+              apifyResult.id,
+              i,
+              data.id,
+              data.url,
+              data.fbid,
+              Boolean(data.private),
+              data.fullName,
+              data.inputUrl,
+              data.username,
+              Boolean(data.verified),
+              data.biography,
+              Boolean(data.hasChannel),
+              data.postsCount,
+              data.followersCount,
+              data.followsCount,
+              data.profilePicUrl,
+              post.alt,
+              post.url,
+              post.type,
+              JSON.stringify(post.images || []),
+              post.caption,
+              post.ownerId,
+              JSON.stringify(post.hashtags || []),
+              Boolean(post.isPinned),
+              JSON.stringify(post.mentions || []),
+              post.timestamp ? new Date(post.timestamp) : null,
+              JSON.stringify(post.childPosts || []),
+              post.likesCount,
+              post.commentsCount,
+              JSON.stringify(post.location),
+              post.videoViewCount,
+              post.videoPlayCount,
+              post.videoDurationMs,
+              post.accessibility,
+              JSON.stringify(post.coauthorProducers || []),
+              JSON.stringify(post.fundraiser),
+              Boolean(post.hasAudio),
+              Boolean(post.isVideo),
+              post.productType,
+            ],
+          );
         }
 
         logger.info(
@@ -551,34 +592,43 @@ export class ApifyService {
       );
 
       // Check if we have recent data (less than 12 hours old)
-      const recentResults = await this.apifyResultsRepo.executeQuery(
+      const recentResults = (await this.apifyResultsRepo.executeQuery(
         `SELECT * FROM apify_results 
          WHERE social_account_id = $1 
          AND created_at > NOW() - INTERVAL '12 hours'
          ORDER BY created_at DESC 
          LIMIT 1`,
         [socialAccountId],
-      );
+      )) as ApifyResultDB[];
 
       let profile: InstagramProfile;
 
       if (recentResults.length > 0) {
         logger.info(
-          `Found recent apify_results from ${recentResults[0].created_at} (less than 12h old), checking for posts...`,
+          `Found recent apify_results from ${recentResults[0]!.created_at} (less than 12h old), checking for posts...`,
         );
-        
+
         // Check if we have posts for this apify_result_id
-        const existingPosts = await this.apifyPostsRepo.executeQuery(
+        const existingPosts = (await this.apifyPostsRepo.executeQuery(
           "SELECT COUNT(*) as count FROM apify_posts WHERE apify_result_id = $1",
-          [recentResults[0].id]
-        );
-        
-        if (existingPosts[0].count > 0) {
-          logger.info(`Using cached posts data for apify_result_id: ${recentResults[0].id}`);
-          profile = await this.reconstructProfileFromPosts(recentResults[0].id);
+          [recentResults[0]!.id],
+        )) as { count: number }[];
+
+        if (existingPosts[0]!.count > 0) {
+          logger.info(
+            `Using cached posts data for apify_result_id: ${recentResults[0]!.id}`,
+          );
+          profile = await this.reconstructProfileFromPosts(
+            recentResults[0]!.id,
+          );
         } else {
-          logger.info(`No posts found for apify_result_id: ${recentResults[0].id}, triggering fresh scrape...`);
-          profile = await this.scrapeInstagramProfile(username, socialAccountId);
+          logger.info(
+            `No posts found for apify_result_id: ${recentResults[0]!.id}, triggering fresh scrape...`,
+          );
+          profile = await this.scrapeInstagramProfile(
+            username,
+            socialAccountId,
+          );
         }
       } else {
         logger.info("No recent data found, calling Apify API...");
