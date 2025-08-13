@@ -2,6 +2,7 @@ import { SocialAccountService } from '../src/services/social-account.service';
 import { AuthService } from '../src/services/auth.service';
 import { ApiError } from '../src/utils/errors';
 import { Platform } from '../src/types/models';
+import { TestCleanup, generateTestEmail, generateTestUsername } from './test-utils';
 
 describe('SocialAccountService', () => {
   let socialAccountService: SocialAccountService;
@@ -10,8 +11,8 @@ describe('SocialAccountService', () => {
 
   const testSocialAccount = {
     platform: Platform.INSTAGRAM,
-    platform_account_id: `test-${Date.now()}`,
-    username: `testuser${Date.now()}`,
+    platform_account_id: generateTestUsername('test'),
+    username: generateTestUsername('testuser'),
     display_name: 'Test User',
     access_token: 'fake-access-token',
     refresh_token: 'fake-refresh-token',
@@ -24,11 +25,16 @@ describe('SocialAccountService', () => {
     
     // Create a test user
     const userResult = await authService.register({
-      email: `social-test-${Date.now()}@example.com`,
+      email: generateTestEmail('social-test'),
       name: 'Social Test User',
       password: 'testpassword123'
     });
     testUserId = userResult.user.id;
+    TestCleanup.trackUser(testUserId);
+  });
+
+  afterAll(async () => {
+    await TestCleanup.cleanup();
   });
 
   describe('Account Creation', () => {

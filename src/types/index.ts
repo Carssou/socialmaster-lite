@@ -203,8 +203,8 @@ export interface AIAnalysis extends BaseModel {
   acknowledgedBy?: string;
   acknowledgedAt?: Date;
   validUntil?: Date;
-  supportingData?: Record<string, any>;
-  generationMetadata?: Record<string, any>;
+  supportingData?: Record<string, unknown>;
+  generationMetadata?: Record<string, unknown>;
 }
 
 // AI Analysis creation DTO
@@ -219,8 +219,8 @@ export interface AIAnalysisDto {
   confidence: number;
   impact: ImpactLevel;
   urgency: UrgencyLevel;
-  supportingData?: Record<string, any>;
-  generationMetadata?: Record<string, any>;
+  supportingData?: Record<string, unknown>;
+  generationMetadata?: Record<string, unknown>;
 }
 
 // Pagination parameters
@@ -245,7 +245,7 @@ export interface FilterParams {
   startDate?: Date;
   endDate?: Date;
   platforms?: Platform[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Sort parameters
@@ -268,7 +268,7 @@ export interface ApiResponse<T> {
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: unknown;
   };
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 }

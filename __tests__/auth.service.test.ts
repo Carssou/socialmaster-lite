@@ -1,6 +1,7 @@
 import { AuthService } from '../src/services/auth.service';
 import { ApiError } from '../src/utils/errors';
 import { UserRegistrationDto, UserLoginDto } from '../src/types/models';
+import { TestCleanup, generateTestEmail } from './test-utils';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -69,7 +70,7 @@ describe('AuthService', () => {
       try {
         await authService.login(loginData);
       } catch (error) {
-        expect(error.statusCode).toBe(403);
+        expect(error.statusCode).toBe(401);
         expect(error.message).toContain('pending approval');
       }
     });

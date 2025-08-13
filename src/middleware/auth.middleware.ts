@@ -4,19 +4,6 @@ import { ApiError } from "../utils/errors";
 import { logger } from "../logger";
 import { pgPool } from "../database";
 
-// Extend Express Request type to include user property
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        email?: string;
-        name?: string;
-      };
-    }
-  }
-}
-
 /**
  * Authentication middleware to protect routes
  * Verifies JWT token and adds user information to request

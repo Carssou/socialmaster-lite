@@ -114,7 +114,7 @@ export class AuthService {
     if (!user.is_active) {
       throw new ApiError(
         "Account is pending approval. Please wait for manual activation.",
-        403,
+        401,
       );
     }
 
