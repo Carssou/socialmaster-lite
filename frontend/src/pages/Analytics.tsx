@@ -10,6 +10,7 @@ export const Analytics: React.FC = () => {
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingInsights, setGeneratingInsights] = useState(false);
+  const [generatingFreshInsights, setGeneratingFreshInsights] = useState(false);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
@@ -100,6 +101,33 @@ export const Analytics: React.FC = () => {
     }
   };
 
+  const generateFreshInsights = async (accountId: string) => {
+    try {
+      setGeneratingFreshInsights(true);
+      setError('');
+      
+      // Trigger fresh scraping + AI insights with forceRefresh=true (2-day minimum)
+      // Backend handles the 1-minute buffer between Apify and LLM automatically
+      console.log('ANALYTICS: Triggering fresh Instagram scraping...');
+      await apiClient.syncAccountData(accountId);
+      
+      console.log('ANALYTICS: Generating fresh AI insights...');
+      const freshInsights = await apiClient.getAIInsights(accountId, true);
+      setInsights(freshInsights);
+      
+      // Refresh metrics to show latest data
+      const { metrics } = await apiClient.getAccountMetricsAndInsights(accountId);
+      setMetrics(metrics);
+      
+      console.log('ANALYTICS: Generated fresh insights:', freshInsights.length);
+    } catch (err: any) {
+      console.warn('Failed to generate fresh insights:', err.message);
+      setError(err.message || 'Failed to generate fresh insights. Please try again later.');
+    } finally {
+      setGeneratingFreshInsights(false);
+    }
+  };
+
   const selectedAccountData = accounts.find(
     (acc) => acc.id === selectedAccount
   );
@@ -147,22 +175,11 @@ export const Analytics: React.FC = () => {
           {selectedAccount && (
             <div className="flex justify-end mb-4">
               <button
-                onClick={async () => {
-                  try {
-                    setLoading(true);
-                    await apiClient.syncAccountData(selectedAccount);
-                    await loadAccountData(selectedAccount);
-                    setError('');
-                  } catch (err: any) {
-                    setError(err.message || 'Failed to sync account data');
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                disabled={loading}
+                onClick={() => generateFreshInsights(selectedAccount)}
+                disabled={generatingFreshInsights || loading}
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                {loading ? 'Syncing...' : 'Sync Account Data'}
+                {generatingFreshInsights ? 'Generating Fresh Insights...' : 'Generate Fresh Insights'}
               </button>
             </div>
           )}
