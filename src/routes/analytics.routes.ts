@@ -2,7 +2,10 @@ import { Router, Request, Response } from "express";
 import { param, query, validationResult } from "express-validator";
 import { authenticate } from "../middleware/auth.middleware";
 import socialAccountService from "../services/social-account.service";
-import apifyService from "../services/apify.service";
+import apifyService, {
+  ApifyPostDB,
+  ApifyResultDB,
+} from "../services/apify.service";
 import aiInsightsService from "../services/ai-insights.service";
 import { ApiError } from "../utils/errors";
 import { logger } from "../logger";
@@ -62,17 +65,20 @@ router.get(
       // Get Apify data from normalized apify_posts table
       const { Repository } = await import("../database/repository");
       const apifyPostsRepo = new Repository("apify_posts");
-      
+
       // Get account username first
-      const accountData = await socialAccountService.getAccount(accountId, userId);
-      
+      const accountData = await socialAccountService.getAccount(
+        accountId,
+        userId,
+      );
+
       // Get all posts for this username from apify_posts
-      const posts = await apifyPostsRepo.executeQuery(
+      const posts = (await apifyPostsRepo.executeQuery(
         `SELECT * FROM apify_posts 
          WHERE profile_username = $1 
          ORDER BY post_timestamp DESC, post_index`,
         [accountData.username],
-      );
+      )) as ApifyPostDB[];
 
       if (posts.length === 0) {
         return res.status(200).json({
@@ -92,13 +98,13 @@ router.get(
 
       // Get profile data from first post (duplicated across all posts)
       const profileData = {
-        followersCount: Number(posts[0].profile_followers_count) || 0,
-        followsCount: Number(posts[0].profile_follows_count) || 0,
-        postsCount: Number(posts[0].profile_posts_count) || 0,
+        followersCount: Number(posts[0]!.profile_followers_count) || 0,
+        followsCount: Number(posts[0]!.profile_follows_count) || 0,
+        postsCount: Number(posts[0]!.profile_posts_count) || 0,
       };
-      
+
       // Convert posts to expected format
-      const postsData = posts.map(post => ({
+      const postsData = posts.map((post) => ({
         likesCount: Number(post.post_likes_count) || 0,
         commentsCount: Number(post.post_comments_count) || 0,
       }));
@@ -113,14 +119,15 @@ router.get(
         0,
       );
       const avgLikes = postsData.length > 0 ? totalLikes / postsData.length : 0;
-      const avgComments = postsData.length > 0 ? totalComments / postsData.length : 0;
+      const avgComments =
+        postsData.length > 0 ? totalComments / postsData.length : 0;
 
       // Calculate engagement rate: (avg engagements per post) ÷ followers
-      // Use total/posts/followers in one calculation for maximum precision  
+      // Use total/posts/followers in one calculation for maximum precision
       const totalEngagements = totalLikes + totalComments;
       const engagementRate =
         profileData.followersCount > 0 && postsData.length > 0
-          ? (totalEngagements / postsData.length / profileData.followersCount)
+          ? totalEngagements / postsData.length / profileData.followersCount
           : 0;
 
       // Create metrics in format expected by frontend
@@ -132,22 +139,22 @@ router.get(
           avgLikes: avgLikes,
           avgComments: avgComments,
           engagementRate: engagementRate, // Already a decimal (0.0123 = 1.23%)
-          lastUpdated: posts[0].last_updated_at,
+          lastUpdated: posts[0]!.last_updated_at,
           postsAnalyzed: postsData.length,
         },
       ];
 
       // Check if we have recent scraping results (less than 12 hours old)
       const apifyResultsRepo = new Repository("apify_results");
-      
-      const recentResults = await apifyResultsRepo.executeQuery(
+
+      const recentResults = (await apifyResultsRepo.executeQuery(
         `SELECT * FROM apify_results 
          WHERE social_account_id = $1 
          AND created_at > NOW() - INTERVAL '12 hours'
          ORDER BY created_at DESC 
          LIMIT 1`,
         [accountId],
-      );
+      )) as ApifyResultDB[];
 
       const hasRecentScraping = recentResults.length > 0;
 
@@ -162,15 +169,15 @@ router.get(
             accountData.username,
           );
           logger.info(`Apify scraper completed for ${accountData.username}`);
-          
+
           // Refetch posts with fresh data
-          const freshPosts = await apifyPostsRepo.executeQuery(
+          const freshPosts = (await apifyPostsRepo.executeQuery(
             `SELECT * FROM apify_posts 
              WHERE profile_username = $1 
              ORDER BY post_timestamp DESC, post_index`,
             [accountData.username],
-          );
-          
+          )) as ApifyPostDB[];
+
           if (freshPosts.length > 0) {
             // Update posts array with fresh data
             posts.length = 0;
@@ -186,38 +193,43 @@ router.get(
         }
       } else {
         logger.info(
-          `Found recent scraping from ${recentResults[0].created_at}, using existing data`,
+          `Found recent scraping from ${recentResults[0]!.created_at}, using existing data`,
         );
       }
 
       // Always get existing insights first
       let existingInsights: any[] = [];
       try {
-        existingInsights = await aiInsightsService.getAccountInsights(accountId, 20);
+        existingInsights = await aiInsightsService.getAccountInsights(
+          accountId,
+          20,
+        );
       } catch (error) {
         logger.info(`No existing insights for account ${accountId}:`, error);
       }
 
       // Generate AI insights only if there was recent scraping (or we just scraped)
       let newInsights: any[] = [];
-      
+
       // Check again for recent scraping (in case we just created new results)
-      const currentResults = await apifyResultsRepo.executeQuery(
+      const currentResults = (await apifyResultsRepo.executeQuery(
         `SELECT * FROM apify_results 
          WHERE social_account_id = $1 
          AND created_at > NOW() - INTERVAL '12 hours'
          ORDER BY created_at DESC 
          LIMIT 1`,
         [accountId],
-      );
-      
+      )) as ApifyResultDB[];
+
       if (currentResults.length > 0) {
         try {
           newInsights = await aiInsightsService.generateAccountInsights(
             userId,
             accountId,
           );
-          logger.info(`Generated ${newInsights.length} new insights based on recent scraping from ${currentResults[0].created_at}`);
+          logger.info(
+            `Generated ${newInsights.length} new insights based on recent scraping from ${currentResults[0]!.created_at}`,
+          );
         } catch (error) {
           logger.info(
             `Could not generate new insights for account ${accountId}:`,
@@ -225,24 +237,28 @@ router.get(
           );
         }
       } else {
-        logger.info(`No recent scraping found, skipping AI insights generation for account ${accountId}`);
+        logger.info(
+          `No recent scraping found, skipping AI insights generation for account ${accountId}`,
+        );
       }
 
       // Combine all insights
       const allInsights = [...newInsights, ...existingInsights];
-      
+
       // Remove duplicates by ID
-      const uniqueInsights = allInsights.filter((insight, index, arr) => 
-        arr.findIndex(i => i.id === insight.id) === index
+      const uniqueInsights = allInsights.filter(
+        (insight, index, arr) =>
+          arr.findIndex((i) => i.id === insight.id) === index,
       );
-      
+
       // Find insights created within the last 12 hours
       const now = new Date();
       const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-      
+
       // Sort by creation date (newest first)
-      const insights = uniqueInsights.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      const insights = uniqueInsights.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       );
 
       return res.status(200).json({
@@ -265,9 +281,13 @@ router.get(
           summary: {
             totalMetrics: basicMetrics.length,
             totalInsights: insights.length,
-            newInsights: insights.filter(i => new Date(i.created_at) >= twelveHoursAgo).length,
-            previousInsights: insights.filter(i => new Date(i.created_at) < twelveHoursAgo).length,
-            lastUpdated: posts[0].last_updated_at,
+            newInsights: insights.filter(
+              (i) => new Date(i.created_at) >= twelveHoursAgo,
+            ).length,
+            previousInsights: insights.filter(
+              (i) => new Date(i.created_at) < twelveHoursAgo,
+            ).length,
+            lastUpdated: posts[0]!.last_updated_at,
             dataSource: "apify_posts",
             dataIsFresh: hasRecentScraping,
           },

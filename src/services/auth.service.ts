@@ -5,10 +5,15 @@ import {
   UserLoginDto,
   AuthResponse,
 } from "../types/models";
-import { generateToken, generateRefreshToken } from "../utils/jwt";
+import {
+  generateToken,
+  generateRefreshToken,
+  timeToSeconds,
+} from "../utils/jwt";
 import { hashPassword, comparePassword } from "../utils/password";
 import { logger } from "../logger";
 import { ApiError } from "../utils/errors";
+import jwt from "jsonwebtoken";
 
 // Interface to match database column names
 interface UserDB {
@@ -79,7 +84,7 @@ export class AuthService {
       },
       accessToken: token,
       refreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
+      expiresIn: timeToSeconds(process.env.JWT_EXPIRES_IN || "86400"),
     };
   }
 
@@ -110,7 +115,7 @@ export class AuthService {
     if (!user.is_active) {
       throw new ApiError(
         "Account is pending approval. Please wait for manual activation.",
-        403,
+        401,
       );
     }
 
@@ -143,7 +148,7 @@ export class AuthService {
       },
       accessToken: token,
       refreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
+      expiresIn: timeToSeconds(process.env.JWT_EXPIRES_IN || "86400"),
     };
   }
 
@@ -165,7 +170,7 @@ export class AuthService {
     return {
       token: newToken,
       refreshToken: newRefreshToken,
-      expiresIn: parseInt(process.env.JWT_EXPIRES_IN || "86400", 10),
+      expiresIn: timeToSeconds(process.env.JWT_EXPIRES_IN || "86400"),
     };
   }
 
@@ -178,8 +183,11 @@ export class AuthService {
     refreshToken: string,
   ): Promise<{ userId: string }> {
     try {
-      const jwt = require("jsonwebtoken");
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      const secret = process.env.JWT_REFRESH_SECRET;
+      if (!secret) {
+        throw new ApiError("JWT refresh secret not configured", 500);
+      }
+      const decoded = jwt.verify(refreshToken, secret) as { userId: string };
 
       // Check if the user exists and is active
       const user = await this.userRepository.findById(decoded.userId);

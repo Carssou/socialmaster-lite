@@ -4,7 +4,7 @@
 export class ApiError extends Error {
   statusCode: number;
   code?: string;
-  details?: any;
+  details?: unknown;
   correlationId: string | undefined;
   isOperational: boolean;
 
@@ -20,7 +20,7 @@ export class ApiError extends Error {
     message: string,
     statusCode: number = 500,
     code?: string,
-    details?: any,
+    details?: unknown,
     correlationId?: string,
   ) {
     super(message);
@@ -154,7 +154,7 @@ function getCorrelationId(req: Request): string {
  * Enhanced error handler middleware for Express
  */
 export const errorHandler = (
-  err: any,
+  err: unknown,
   req: Request,
   res: Response,
   _next: NextFunction,
@@ -171,48 +171,55 @@ export const errorHandler = (
     statusCode = err.statusCode;
     errorCode = err.code || "UNKNOWN_ERROR";
     message = err.message;
-    details = err.details;
+    details = err.details as undefined;
     isOperational = err.isOperational;
 
     // Update correlation ID if not set
     if (!err.correlationId) {
       err.correlationId = correlationId;
     }
-  } else if (err.name === "ValidationError" || err.name === "ZodError") {
+  } else if (
+    (err as Error).name === "ValidationError" ||
+    (err as Error).name === "ZodError"
+  ) {
     // Handle Zod or other validation errors
     statusCode = 400;
     errorCode = "VALIDATION_ERROR";
     message = "Request validation failed";
-    details = err.errors || err.issues || err.details || err.message;
+    details =
+      (err as any).errors ||
+      (err as any).issues ||
+      (err as any).details ||
+      (err as Error).message;
     isOperational = true;
   } else if (
-    err.name === "UnauthorizedError" ||
-    err.name === "JsonWebTokenError"
+    (err as Error).name === "UnauthorizedError" ||
+    (err as Error).name === "JsonWebTokenError"
   ) {
     // Handle JWT authentication errors
     statusCode = 401;
     errorCode = "AUTHENTICATION_ERROR";
     message = "Authentication failed";
     isOperational = true;
-  } else if (err.name === "TokenExpiredError") {
+  } else if ((err as Error).name === "TokenExpiredError") {
     // Handle expired JWT tokens
     statusCode = 401;
     errorCode = "TOKEN_EXPIRED";
     message = "Authentication token has expired";
     isOperational = true;
-  } else if (err.code === "ECONNREFUSED") {
+  } else if ((err as any).code === "ECONNREFUSED") {
     // Handle database connection errors
     statusCode = 503;
     errorCode = "SERVICE_UNAVAILABLE";
     message = "Database connection failed";
     isOperational = true;
-  } else if (err.code === "23505") {
+  } else if ((err as any).code === "23505") {
     // Handle PostgreSQL unique constraint violation
     statusCode = 409;
     errorCode = "DUPLICATE_ENTRY";
     message = "Resource already exists";
     isOperational = true;
-  } else if (err.code === "23503") {
+  } else if ((err as any).code === "23503") {
     // Handle PostgreSQL foreign key constraint violation
     statusCode = 400;
     errorCode = "FOREIGN_KEY_VIOLATION";
@@ -235,7 +242,7 @@ export const errorHandler = (
     ip: req.ip,
     userId,
     details,
-    stack: isOperational ? undefined : err.stack, // Only log stack for unexpected errors
+    stack: isOperational ? undefined : (err as Error).stack, // Only log stack for unexpected errors
     isOperational,
   };
 
@@ -269,10 +276,7 @@ export const errorHandler = (
 
   // Add additional debug info in development
   if (process.env.NODE_ENV === "development" && !isOperational) {
-    response.error = {
-      ...response.error,
-      stack: err.stack,
-    } as any;
+    (response.error as any).stack = (err as Error).stack;
   }
 
   res.status(statusCode).json(response);
@@ -281,7 +285,9 @@ export const errorHandler = (
 /**
  * Async error wrapper for route handlers
  */
-export const asyncHandler = (fn: Function) => {
+export const asyncHandler = (
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<void> | void,
+) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };

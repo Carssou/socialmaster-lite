@@ -2,6 +2,7 @@ import { SocialAccountService } from '../src/services/social-account.service';
 import { AuthService } from '../src/services/auth.service';
 import { ApiError } from '../src/utils/errors';
 import { Platform } from '../src/types/models';
+import { TestCleanup, generateTestEmail, generateTestUsername } from './test-utils';
 
 describe('SocialAccountService', () => {
   let socialAccountService: SocialAccountService;
@@ -10,8 +11,8 @@ describe('SocialAccountService', () => {
 
   const testSocialAccount = {
     platform: Platform.INSTAGRAM,
-    platform_account_id: `test-${Date.now()}`,
-    username: `testuser${Date.now()}`,
+    platform_account_id: generateTestUsername('test'),
+    username: generateTestUsername('testuser'),
     display_name: 'Test User',
     access_token: 'fake-access-token',
     refresh_token: 'fake-refresh-token',
@@ -24,11 +25,16 @@ describe('SocialAccountService', () => {
     
     // Create a test user
     const userResult = await authService.register({
-      email: `social-test-${Date.now()}@example.com`,
+      email: generateTestEmail('social-test'),
       name: 'Social Test User',
       password: 'testpassword123'
     });
     testUserId = userResult.user.id;
+    TestCleanup.trackUser(testUserId);
+  });
+
+  afterAll(async () => {
+    await TestCleanup.cleanup();
   });
 
   describe('Account Creation', () => {
@@ -86,7 +92,8 @@ describe('SocialAccountService', () => {
       expect(accounts.length).toBeGreaterThan(0);
       
       const account = accounts[0];
-      expect(account.user_id).toBe(testUserId);
+      expect(account).toBeDefined();
+      expect(account?.user_id).toBe(testUserId);
     });
 
     test('should get active user accounts', async () => {
@@ -114,7 +121,8 @@ describe('SocialAccountService', () => {
 
     test('should get specific account with ownership check', async () => {
       const accounts = await socialAccountService.getUserAccounts(testUserId);
-      const accountId = accounts[0].id;
+      expect(accounts.length).toBeGreaterThan(0);
+      const accountId = accounts[0]!.id;
       
       const account = await socialAccountService.getAccount(accountId, testUserId);
       
@@ -125,7 +133,8 @@ describe('SocialAccountService', () => {
 
     test('should fail to get account with wrong user', async () => {
       const accounts = await socialAccountService.getUserAccounts(testUserId);
-      const accountId = accounts[0].id;
+      expect(accounts.length).toBeGreaterThan(0);
+      const accountId = accounts[0]!.id;
       const fakeUserId = 'fake-user-id';
       
       await expect(socialAccountService.getAccount(accountId, fakeUserId))
@@ -144,7 +153,8 @@ describe('SocialAccountService', () => {
   describe('Account Deactivation', () => {
     test('should deactivate account', async () => {
       const accounts = await socialAccountService.getUserAccounts(testUserId);
-      const accountId = accounts[0].id;
+      expect(accounts.length).toBeGreaterThan(0);
+      const accountId = accounts[0]!.id;
       
       await socialAccountService.deactivateAccount(accountId, testUserId);
       

@@ -1,13 +1,15 @@
 // Generic repository for database operations
+import { Pool, PoolClient } from "pg";
 import { transaction, buildWhereClause, buildPaginationClause } from "./index";
 import { PaginatedResult, QueryParams } from "../types";
+import { pgPool } from "../database";
 
 /**
  * Generic repository class for database operations
  * @template T The entity type
  */
 export class Repository<T> {
-  private pgPool: any;
+  private pgPool: Pool;
 
   /**
    * Create a new repository
@@ -19,7 +21,6 @@ export class Repository<T> {
     private readonly primaryKey: string = "id",
   ) {
     // Initialize pgPool once in constructor
-    const { pgPool } = require("../database");
     this.pgPool = pgPool;
   }
 
@@ -34,9 +35,9 @@ export class Repository<T> {
    * Convert object keys from camelCase to snake_case
    */
   private convertKeysToSnakeCase(
-    obj: Record<string, any>,
-  ): Record<string, any> {
-    const converted: Record<string, any> = {};
+    obj: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const converted: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
       converted[this.toSnakeCase(key)] = value;
     }
@@ -143,7 +144,7 @@ export class Repository<T> {
    * @param value The field value
    * @returns Array of matching entities
    */
-  async findByField(field: string, value: any): Promise<T[]> {
+  async findByField(field: string, value: unknown): Promise<T[]> {
     const sql = `
       SELECT *
       FROM ${this.tableName}
@@ -167,7 +168,7 @@ export class Repository<T> {
    */
   async create(data: Partial<T>): Promise<T> {
     // Convert camelCase keys to snake_case for database
-    const dbData = this.convertKeysToSnakeCase(data as Record<string, any>);
+    const dbData = this.convertKeysToSnakeCase(data as Record<string, unknown>);
     const fields = Object.keys(dbData);
     const values = Object.values(dbData);
     const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
@@ -199,7 +200,7 @@ export class Repository<T> {
    */
   async update(id: string | number, data: Partial<T>): Promise<T | null> {
     // Convert camelCase keys to snake_case for database
-    const dbData = this.convertKeysToSnakeCase(data as Record<string, any>);
+    const dbData = this.convertKeysToSnakeCase(data as Record<string, unknown>);
     const fields = Object.keys(dbData);
     const values = Object.values(dbData);
 
@@ -255,7 +256,7 @@ export class Repository<T> {
    * @param filters Filter conditions
    * @returns Count of matching entities
    */
-  async count(filters?: Record<string, any>): Promise<number> {
+  async count(filters?: Record<string, unknown>): Promise<number> {
     const whereClause = filters
       ? buildWhereClause(filters)
       : { text: "", values: [] };
@@ -280,7 +281,7 @@ export class Repository<T> {
    * @param conditions Conditions to check
    * @returns Boolean indicating if the entity exists
    */
-  async exists(conditions: Record<string, any>): Promise<boolean> {
+  async exists(conditions: Record<string, unknown>): Promise<boolean> {
     const whereClause = buildWhereClause(conditions);
     const sql = `
       SELECT EXISTS (
@@ -309,7 +310,10 @@ export class Repository<T> {
    * @param params Query parameters
    * @returns Query result
    */
-  async executeQuery<R = any>(sql: string, params: any[] = []): Promise<R[]> {
+  async executeQuery<R = unknown>(
+    sql: string,
+    params: unknown[] = [],
+  ): Promise<R[]> {
     // Use client connection to avoid hanging
     const client = await this.pgPool.connect();
     let result;
@@ -326,8 +330,8 @@ export class Repository<T> {
    * @param callback Transaction callback
    * @returns Transaction result
    */
-  async executeTransaction<R = any>(
-    callback: (client: any) => Promise<R>,
+  async executeTransaction<R = unknown>(
+    callback: (client: PoolClient) => Promise<R>,
   ): Promise<R> {
     return transaction<R>(callback);
   }

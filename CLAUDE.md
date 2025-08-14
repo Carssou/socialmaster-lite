@@ -164,3 +164,5 @@ export class ApifyService {
 **Phase 3**: If Apify becomes 30%+ of costs, THEN consider custom scraping
 
 Don't build Phase 3 infrastructure for Phase 0 usage!
+
+- Always use npm run lint after code changes
