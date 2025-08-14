@@ -49,7 +49,7 @@ export class TestCleanup {
 
       // Delete any AI analyses (if they exist and reference users)
       await client.query(
-        `DELETE FROM ai_analyses WHERE user_id NOT IN (SELECT id FROM users)`
+        `DELETE FROM ai_analysis WHERE user_id NOT IN (SELECT id FROM users)`
       );
 
       // Delete any account metrics (if they exist and reference social accounts)
