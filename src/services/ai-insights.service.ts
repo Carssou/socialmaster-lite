@@ -51,6 +51,7 @@ export class AIInsightsService {
   async generateAccountInsights(
     userId: string,
     socialAccountId: string,
+    forceRefresh: boolean = false,
   ): Promise<AIAnalysisDB[]> {
     try {
       logger.info(
@@ -58,19 +59,41 @@ export class AIInsightsService {
       );
 
       // Step 1: Check for recent insights first
-      const recentInsights =
-        await this.dataService.getRecentInsights(socialAccountId);
+      let recentInsights: AIAnalysisDB[] = [];
 
-      if (recentInsights.length > 0) {
+      if (forceRefresh) {
+        // For user-requested insights, check 2-day threshold
+        recentInsights =
+          await this.dataService.getRecentInsightsForUserRequest(
+            socialAccountId,
+          );
+
+        if (recentInsights.length > 0) {
+          logger.info(
+            `AI INSIGHTS: User-requested insights blocked - existing insights from ${recentInsights[0]!.created_at} (less than ${TIME_INTERVALS.AI_INSIGHTS_USER_REQUEST_CACHE_HOURS}h old)`,
+          );
+          return recentInsights;
+        }
+
         logger.info(
-          `AI INSIGHTS: Using existing AI insights from ${recentInsights[0]!.created_at} (less than ${TIME_INTERVALS.AI_INSIGHTS_CACHE_HOURS}h old)`,
+          "AI INSIGHTS: No recent user-requested insights found (2-day check), generating new ones...",
         );
-        return recentInsights;
-      }
+      } else {
+        // For automatic insights, check 7-day threshold
+        recentInsights =
+          await this.dataService.getRecentInsights(socialAccountId);
 
-      logger.info(
-        "AI INSIGHTS: No recent AI insights found, generating new ones...",
-      );
+        if (recentInsights.length > 0) {
+          logger.info(
+            `AI INSIGHTS: Using existing AI insights from ${recentInsights[0]!.created_at} (less than ${TIME_INTERVALS.AI_INSIGHTS_CACHE_HOURS}h old)`,
+          );
+          return recentInsights;
+        }
+
+        logger.info(
+          "AI INSIGHTS: No recent automatic insights found (7-day check), generating new ones...",
+        );
+      }
 
       // Step 2: Generate new insights
       const insights = await this.generateNewInsights(userId, socialAccountId);

@@ -3,7 +3,8 @@
 export const TIME_INTERVALS = {
   // Cache/refresh intervals
   RECENT_DATA_THRESHOLD_HOURS: 12,
-  AI_INSIGHTS_CACHE_HOURS: 12,
+  AI_INSIGHTS_CACHE_HOURS: 168, // 7 days (168 hours) for automatic generation
+  AI_INSIGHTS_USER_REQUEST_CACHE_HOURS: 48, // 2 days (48 hours) for user-requested generation
   APIFY_DATA_PROCESSING_DELAY_MS: 60000, // 1 minute
 
   // Retention periods

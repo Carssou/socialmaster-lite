@@ -116,7 +116,7 @@ describe('ACTUAL AI INSIGHTS TEST', () => {
     console.log('\n🚀 Making REAL LLM API call...');
     console.log('💰 WARNING: This will consume API credits!');
     
-    const insights = await aiService.generateAccountInsights(realUserId, realAccountId);
+    const insights = await aiService.generateAccountInsights(realUserId, realAccountId, false);
     
     console.log(`🎯 Generated ${insights.length} insights from real LLM:`);
     

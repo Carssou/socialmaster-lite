@@ -71,7 +71,7 @@ describe('DEMO ACCOUNTS WITH REAL DATA', () => {
 
         // Generate AI insights
         console.log('🧠 Generating AI insights...');
-        const insights = await aiService.generateAccountInsights(acc.user_id, acc.account_id);
+        const insights = await aiService.generateAccountInsights(acc.user_id, acc.account_id, false);
         console.log(`🎯 Generated ${insights.length} insights`);
 
         expect(metrics.length).toBeGreaterThan(0);

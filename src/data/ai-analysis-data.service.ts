@@ -40,13 +40,29 @@ export class AIAnalysisDataService {
   }
 
   /**
-   * Check for recent AI insights within threshold
+   * Check for recent AI insights within threshold for automatic generation (7 days)
    */
   async getRecentInsights(socialAccountId: string): Promise<AIAnalysisDB[]> {
     return (await this.aiAnalysisRepo.executeQuery(
       `SELECT * FROM ai_analysis 
        WHERE social_account_id = $1 
        AND created_at > NOW() - INTERVAL '${TIME_INTERVALS.AI_INSIGHTS_CACHE_HOURS} hours'
+       AND is_active = true
+       ORDER BY created_at DESC`,
+      [socialAccountId],
+    )) as AIAnalysisDB[];
+  }
+
+  /**
+   * Check for recent AI insights within threshold for user-requested generation (2 days)
+   */
+  async getRecentInsightsForUserRequest(
+    socialAccountId: string,
+  ): Promise<AIAnalysisDB[]> {
+    return (await this.aiAnalysisRepo.executeQuery(
+      `SELECT * FROM ai_analysis 
+       WHERE social_account_id = $1 
+       AND created_at > NOW() - INTERVAL '${TIME_INTERVALS.AI_INSIGHTS_USER_REQUEST_CACHE_HOURS} hours'
        AND is_active = true
        ORDER BY created_at DESC`,
       [socialAccountId],

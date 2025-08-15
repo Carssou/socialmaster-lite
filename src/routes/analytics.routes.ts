@@ -226,6 +226,7 @@ router.get(
           newInsights = await aiInsightsService.generateAccountInsights(
             userId,
             accountId,
+            false, // Automatic generation (7-day cache)
           );
           logger.info(
             `Generated ${newInsights.length} new insights based on recent scraping from ${currentResults[0]!.created_at}`,
@@ -251,9 +252,9 @@ router.get(
           arr.findIndex((i) => i.id === insight.id) === index,
       );
 
-      // Find insights created within the last 12 hours
+      // Find insights created within the last 7 days (for "new" marking in UI)
       const now = new Date();
-      const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       // Sort by creation date (newest first)
       const insights = uniqueInsights.sort(
@@ -276,16 +277,16 @@ router.get(
             confidence: insight.confidence / 100, // Convert to decimal for frontend
             priority: insight.impact,
             createdAt: insight.created_at,
-            isNew: new Date(insight.created_at) >= twelveHoursAgo, // Mark insights from last 12 hours as "new"
+            isNew: new Date(insight.created_at) >= sevenDaysAgo, // Mark insights from last 7 days as "new"
           })),
           summary: {
             totalMetrics: basicMetrics.length,
             totalInsights: insights.length,
             newInsights: insights.filter(
-              (i) => new Date(i.created_at) >= twelveHoursAgo,
+              (i) => new Date(i.created_at) >= sevenDaysAgo,
             ).length,
             previousInsights: insights.filter(
-              (i) => new Date(i.created_at) < twelveHoursAgo,
+              (i) => new Date(i.created_at) < sevenDaysAgo,
             ).length,
             lastUpdated: posts[0]!.last_updated_at,
             dataSource: "apify_posts",
@@ -409,12 +410,13 @@ router.get(
         `Getting AI insights for account: ${accountId}, forceRefresh: ${forceRefresh}`,
       );
 
-      // Get insights (uses 12-hour cache unless forced)
+      // Get insights (uses 7-day cache for automatic, 2-day cache for user-requested)
       let insights: any[] = [];
       try {
         insights = await aiInsightsService.generateAccountInsights(
           userId,
           accountId,
+          forceRefresh,
         );
       } catch (error: any) {
         logger.info(`ANALYTICS ROUTE: Caught error generating insights:`, {
