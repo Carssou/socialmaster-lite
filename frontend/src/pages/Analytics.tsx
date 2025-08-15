@@ -103,12 +103,12 @@ export const Analytics: React.FC = () => {
   };
 
   const generateFreshInsights = async (accountId: string) => {
+    // Store existing insights to preserve them during generation
+    const existingInsights = [...insights];
+    
     try {
       setGeneratingFreshInsights(true);
       setError('');
-      
-      // Store existing insights to preserve them during generation
-      const existingInsights = [...insights];
       
       // Trigger fresh scraping + AI insights with forceRefresh=true (2-day minimum)
       // Backend handles the 1-minute buffer between Apify and LLM automatically
@@ -129,8 +129,8 @@ export const Analytics: React.FC = () => {
     } catch (err: any) {
       console.warn('Failed to generate fresh insights:', err.message);
       setError(err.message || 'Failed to generate fresh insights. Please try again later.');
-      // On error, restore existing insights to ensure they don't disappear
-      // Keep existing insights visible even if fresh generation fails
+      // Restore existing insights on error to ensure they don't disappear
+      setInsights(existingInsights);
     } finally {
       setGeneratingFreshInsights(false);
     }

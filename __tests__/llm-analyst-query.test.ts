@@ -42,7 +42,47 @@ describe("LLMAnalystQueryService", () => {
 
     it("should reject dangerous keywords", async () => {
       await expect(
-        service.executeQuery("SELECT * FROM ai_analysis; DROP TABLE users;")
+        service.executeQuery("SELECT * FROM ai_analysis WHERE 1=1 UPDATE users SET password='hacked'")
+      ).rejects.toThrow(ApiError);
+      
+      expect(mockExecuteQuery).not.toHaveBeenCalled();
+    });
+
+    it("should reject multiple statements", async () => {
+      await expect(
+        service.executeQuery("SELECT * FROM ai_analysis; SELECT * FROM users;")
+      ).rejects.toThrow(ApiError);
+      
+      expect(mockExecuteQuery).not.toHaveBeenCalled();
+    });
+
+    it("should reject SQL injection via comments", async () => {
+      await expect(
+        service.executeQuery("SELECT * FROM ai_analysis -- comment\n; DROP TABLE users;")
+      ).rejects.toThrow(ApiError);
+      
+      expect(mockExecuteQuery).not.toHaveBeenCalled();
+    });
+
+    it("should reject SQL injection via block comments", async () => {
+      await expect(
+        service.executeQuery("SELECT * /* comment */ FROM ai_analysis; DROP TABLE users;")
+      ).rejects.toThrow(ApiError);
+      
+      expect(mockExecuteQuery).not.toHaveBeenCalled();
+    });
+
+    it("should reject INSERT INTO attempts", async () => {
+      await expect(
+        service.executeQuery("SELECT * FROM ai_analysis WHERE 1=1 INSERT INTO users VALUES('evil')")
+      ).rejects.toThrow(ApiError);
+      
+      expect(mockExecuteQuery).not.toHaveBeenCalled();
+    });
+
+    it("should reject GRANT/REVOKE statements", async () => {
+      await expect(
+        service.executeQuery("SELECT * FROM ai_analysis WHERE 1=1 GRANT ALL PRIVILEGES ON users TO hacker")
       ).rejects.toThrow(ApiError);
       
       expect(mockExecuteQuery).not.toHaveBeenCalled();
@@ -70,7 +110,7 @@ describe("LLMAnalystQueryService", () => {
       expect(result.count).toBe(1);
       expect(mockExecuteQuery).toHaveBeenCalledWith(
         expect.stringContaining("WHERE user_id = $1"), 
-        ["user-1", 50]
+        ["user-1", "30 days", 50]
       );
     });
 
@@ -126,7 +166,7 @@ describe("LLMAnalystQueryService", () => {
       expect(result.data).toEqual(summaryData);
       expect(mockExecuteQuery).toHaveBeenCalledWith(
         expect.stringContaining("COUNT(*) as total_analyses"),
-        ["user-1"]
+        ["user-1", "30 days"]
       );
     });
   });
@@ -140,9 +180,24 @@ describe("LLMAnalystQueryService", () => {
       ).rejects.toThrow(ApiError);
     });
 
-    it("should return error object for function failures", async () => {
-      // This would be tested at the LLM client level where function execution is wrapped
-      expect(true).toBe(true); // Placeholder for integration test
+    it("should handle executeAnalystFunction errors gracefully", async () => {
+      const { LLMClientService } = require("../src/services/llm-client.service");
+      const llmClient = new LLMClientService();
+      
+      // Access private method for testing
+      const executeAnalystFunction = llmClient.executeAnalystFunction.bind(llmClient);
+      
+      const result = await executeAnalystFunction("nonexistentFunction", {});
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+
+    it("should handle invalid query parameters", async () => {
+      // Test with null parameters
+      await expect(
+        service.executeQuery("SELECT * FROM ai_analysis WHERE user_id = $1", [null])
+      ).rejects.toThrow();
     });
   });
 });

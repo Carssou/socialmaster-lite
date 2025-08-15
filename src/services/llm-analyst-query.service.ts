@@ -27,13 +27,24 @@ export class LLMAnalystQueryService {
 
   /**
    * Validate that query is safe (SELECT only)
+   * Enhanced validation to prevent SQL injection attacks
    */
   private validateQuery(query: string): void {
     const normalizedQuery = query.trim().toLowerCase();
 
+    // Strip SQL comments before validation
+    const queryWithoutComments = normalizedQuery
+      .replace(/--.*$/gm, "") // Remove line comments
+      .replace(/\/\*[\s\S]*?\*\//g, ""); // Remove block comments
+
     // Only allow SELECT statements
-    if (!normalizedQuery.startsWith("select")) {
+    if (!queryWithoutComments.trim().startsWith("select")) {
       throw new ApiError("Only SELECT queries are allowed", 400);
+    }
+
+    // Check for multiple statements
+    if (queryWithoutComments.includes(";")) {
+      throw new ApiError("Multiple statements are not allowed", 400);
     }
 
     // Block dangerous keywords with word boundaries to avoid false positives
@@ -49,11 +60,14 @@ export class LLMAnalystQueryService {
       "\\bexecute\\b",
       "\\bcall\\b",
       "\\bdeclare\\b",
+      "\\binto\\b",
+      "\\bgrant\\b",
+      "\\brevoke\\b",
     ];
 
     for (const keyword of dangerousKeywords) {
       const regex = new RegExp(keyword, "i");
-      if (regex.test(normalizedQuery)) {
+      if (regex.test(queryWithoutComments)) {
         throw new ApiError(
           `Query contains forbidden keyword: ${keyword.replace(/\\b/g, "")}`,
           400,
@@ -110,13 +124,13 @@ export class LLMAnalystQueryService {
              is_active, created_at, updated_at
       FROM ai_analysis 
       WHERE user_id = $1 
-      AND created_at > NOW() - INTERVAL '${days} days'
+      AND created_at > NOW() - INTERVAL $2
       AND is_active = true
       ORDER BY created_at DESC 
-      LIMIT $2
+      LIMIT $3
     `;
 
-    return this.executeQuery(query, [userId, limit]);
+    return this.executeQuery(query, [userId, `${days} days`, limit]);
   }
 
   /**
@@ -212,13 +226,13 @@ export class LLMAnalystQueryService {
         AVG(confidence) as avg_confidence
       FROM ai_analysis 
       WHERE user_id = $1 
-      AND created_at > NOW() - INTERVAL '${days} days'
+      AND created_at > NOW() - INTERVAL $2
       AND is_active = true
       GROUP BY DATE_TRUNC('week', created_at), impact, urgency, type, category
       ORDER BY week DESC, count DESC
     `;
 
-    return this.executeQuery(query, [userId]);
+    return this.executeQuery(query, [userId, `${days} days`]);
   }
 
   /**
@@ -277,11 +291,11 @@ export class LLMAnalystQueryService {
         MAX(created_at) as latest_analysis
       FROM ai_analysis 
       WHERE user_id = $1 
-      AND created_at > NOW() - INTERVAL '${days} days'
+      AND created_at > NOW() - INTERVAL $2
       AND is_active = true
     `;
 
-    return this.executeQuery(query, [userId]);
+    return this.executeQuery(query, [userId, `${days} days`]);
   }
 }
 

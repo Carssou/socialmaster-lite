@@ -399,7 +399,25 @@ export class LLMClientService {
       for (const toolCall of message.tool_calls) {
         if (toolCall.type === "function") {
           const functionName = toolCall.function.name;
-          const parameters = JSON.parse(toolCall.function.arguments);
+          let parameters;
+
+          try {
+            parameters = JSON.parse(toolCall.function.arguments);
+          } catch (error) {
+            logger.error(
+              `Failed to parse function arguments for ${functionName}:`,
+              error,
+            );
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                success: false,
+                error: "Invalid function arguments format",
+              }),
+            });
+            continue;
+          }
 
           // Auto-inject userId/socialAccountId if not provided
           if (!parameters.userId && userId) {
@@ -493,8 +511,48 @@ export class LLMClientService {
           finalText += block.text;
         } else if (block.type === "tool_use") {
           hasToolUse = true;
+
+          // Store any text that came before tool use
+          if (finalText) {
+            messages.push({
+              role: "assistant",
+              content: [{ type: "text", text: finalText }],
+            });
+            finalText = ""; // Clear after adding to messages
+          }
+
           const functionName = block.name;
           const parameters = block.input as any;
+
+          // Validate parameters object
+          if (!parameters || typeof parameters !== "object") {
+            logger.error(
+              `Invalid function parameters for ${functionName}:`,
+              parameters,
+            );
+
+            // Add the malformed tool use to conversation
+            messages.push({
+              role: "assistant",
+              content: [block],
+            });
+
+            // Add error response
+            messages.push({
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: block.id,
+                  content: JSON.stringify({
+                    success: false,
+                    error: "Invalid function parameters format",
+                  }),
+                },
+              ],
+            });
+            continue;
+          }
 
           // Auto-inject userId/socialAccountId if not provided
           if (!parameters.userId && userId) {
