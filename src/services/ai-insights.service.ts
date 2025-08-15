@@ -10,6 +10,7 @@ import {
   AIAnalysisDB,
 } from "../data/ai-analysis-data.service";
 import apifyService from "./apify.service";
+import llmAnalystQueryService from "./llm-analyst-query.service";
 
 /**
  * Service for generating AI insights from Instagram metrics using LLM
@@ -137,7 +138,13 @@ export class AIInsightsService {
     // Step 2: Get posts for analysis (with fallback to fresh data)
     const posts = await this.getPostsForAnalysis(socialAccountId, username);
 
-    // Step 3: Prepare analysis data and prompts
+    // Step 3: Check if there are any existing insights to provide context
+    const hasExistingInsights = await this.checkForExistingInsights(
+      userId,
+      socialAccountId,
+    );
+
+    // Step 4: Prepare analysis data and prompts
     const analysisData = this.promptService.prepareAnalysisData(
       posts,
       username,
@@ -145,18 +152,34 @@ export class AIInsightsService {
     const userPrompt = this.promptService.createAnalysisPrompt(analysisData);
     const systemPrompt = this.promptService.getSystemPrompt();
 
-    // Step 4: Call LLM for insights
-    logger.info("AI INSIGHTS: Calling LLM to generate insights...");
-    const llmResponse = await this.llmClient.generateInsights(
-      systemPrompt,
-      userPrompt,
-    );
+    // Step 5: Call LLM with or without context based on existing insights
+    let llmResponse: string;
 
-    // Step 5: Process LLM response
+    if (hasExistingInsights) {
+      logger.info(
+        "AI INSIGHTS: Existing insights found - generating context-aware insights...",
+      );
+      llmResponse = await this.llmClient.generateInsightsWithContext(
+        systemPrompt,
+        userPrompt,
+        userId,
+        socialAccountId,
+      );
+    } else {
+      logger.info(
+        "AI INSIGHTS: No existing insights found - generating first-time insights...",
+      );
+      llmResponse = await this.llmClient.generateInsights(
+        systemPrompt,
+        userPrompt,
+      );
+    }
+
+    // Step 6: Process LLM response
     const insights = this.responseProcessor.parseInsightResponse(llmResponse);
     logger.info(`AI INSIGHTS: LLM generated ${insights.length} raw insights`);
 
-    // Step 6: Convert to database format and store
+    // Step 7: Convert to database format and store
     const storedInsights: AIAnalysisDB[] = [];
     const supportingData = {
       postsAnalyzed: posts.length,
@@ -176,6 +199,53 @@ export class AIInsightsService {
     }
 
     return storedInsights;
+  }
+
+  /**
+   * Check if there are any existing insights to provide context
+   * Returns true if there are ANY insights in the database for this user or account
+   * Uses direct database query to check existence regardless of business logic
+   */
+  private async checkForExistingInsights(
+    userId: string,
+    socialAccountId: string,
+  ): Promise<boolean> {
+    try {
+      // Check for ANY insights for this user (most comprehensive check)
+      const userInsightsResult = await llmAnalystQueryService.executeQuery(
+        "SELECT COUNT(*) as count FROM ai_analysis WHERE user_id = $1",
+        [userId],
+      );
+
+      const userCount = userInsightsResult.data[0]?.count || 0;
+      if (userCount > 0) {
+        logger.info(
+          `AI INSIGHTS: Found ${userCount} existing insights for user in database`,
+        );
+        return true;
+      }
+
+      // Check for ANY insights for this specific account
+      const accountInsightsResult = await llmAnalystQueryService.executeQuery(
+        "SELECT COUNT(*) as count FROM ai_analysis WHERE social_account_id = $1",
+        [socialAccountId],
+      );
+
+      const accountCount = accountInsightsResult.data[0]?.count || 0;
+      if (accountCount > 0) {
+        logger.info(
+          `AI INSIGHTS: Found ${accountCount} existing insights for account in database`,
+        );
+        return true;
+      }
+
+      logger.info("AI INSIGHTS: No existing insights found in database");
+      return false;
+    } catch (error) {
+      logger.warn("AI INSIGHTS: Error checking for existing insights:", error);
+      // If we can't check, assume no context (safer fallback)
+      return false;
+    }
   }
 
   /**
