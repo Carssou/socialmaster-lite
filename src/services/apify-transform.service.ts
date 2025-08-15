@@ -131,7 +131,7 @@ export class ApifyTransformService {
       childPosts: sanitizeJsonField(post.childPosts, []),
       likesCount: validateNumber(post.likesCount),
       commentsCount: validateNumber(post.commentsCount),
-      location: sanitizeJsonField(post.location, null),
+      location: post.location || null,
       videoViewCount: validateNumber(post.videoViewCount),
       videoPlayCount: validateNumber(post.videoPlayCount),
       videoDurationMs: validateNumber(post.videoDurationMs),

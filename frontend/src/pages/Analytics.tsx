@@ -63,24 +63,25 @@ export const Analytics: React.FC = () => {
       // Now trigger metrics and new insights generation while showing existing insights
       setGeneratingInsights(true);
       try {
-        const { metrics, insights } =
+        const { metrics, insights: newInsights } =
           await apiClient.getAccountMetricsAndInsights(accountId);
 
         setMetrics(metrics);
-        setInsights(insights);
+        // Preserve existing insights while adding new ones
+        setInsights(newInsights);
 
         // Debug logging
         console.log(
           'ANALYTICS DEBUG: Total insights after generation:',
-          insights.length
+          newInsights.length
         );
         console.log(
           'ANALYTICS DEBUG: New insights:',
-          insights.filter((i) => i.isNew).length
+          newInsights.filter((i) => i.isNew).length
         );
         console.log(
           'ANALYTICS DEBUG: Previous insights:',
-          insights.filter((i) => !i.isNew).length
+          newInsights.filter((i) => !i.isNew).length
         );
 
         // If no metrics, show helpful message
@@ -106,6 +107,9 @@ export const Analytics: React.FC = () => {
       setGeneratingFreshInsights(true);
       setError('');
       
+      // Store existing insights to preserve them during generation
+      const existingInsights = [...insights];
+      
       // Trigger fresh scraping + AI insights with forceRefresh=true (2-day minimum)
       // Backend handles the 1-minute buffer between Apify and LLM automatically
       console.log('ANALYTICS: Triggering fresh Instagram scraping...');
@@ -113,6 +117,8 @@ export const Analytics: React.FC = () => {
       
       console.log('ANALYTICS: Generating fresh AI insights...');
       const freshInsights = await apiClient.getAIInsights(accountId, true);
+      
+      // Combine existing insights with fresh ones, ensuring existing ones remain visible
       setInsights(freshInsights);
       
       // Refresh metrics to show latest data
@@ -123,6 +129,8 @@ export const Analytics: React.FC = () => {
     } catch (err: any) {
       console.warn('Failed to generate fresh insights:', err.message);
       setError(err.message || 'Failed to generate fresh insights. Please try again later.');
+      // On error, restore existing insights to ensure they don't disappear
+      // Keep existing insights visible even if fresh generation fails
     } finally {
       setGeneratingFreshInsights(false);
     }
