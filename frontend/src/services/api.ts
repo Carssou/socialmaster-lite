@@ -278,6 +278,10 @@ class ApiClient {
     return response.data.data || [];
   }
 
+  async rateInsight(insightId: string, rating: boolean | null): Promise<void> {
+    await this.client.put(`/analytics/insights/${insightId}/rating`, { rating });
+  }
+
   async getDashboardData(): Promise<{
     accounts: SocialAccount[];
     recentMetrics: AccountMetrics[];

@@ -29,6 +29,10 @@ const insightsValidation = [
     .withMessage("Force refresh must be a boolean"),
 ];
 
+const ratingValidation = [
+  param("insightId").isUUID().withMessage("Valid insight ID is required"),
+];
+
 // Helper function to check validation errors
 const checkValidationErrors = (req: Request): void => {
   const errors = validationResult(req);
@@ -278,6 +282,7 @@ router.get(
             priority: insight.impact,
             createdAt: insight.created_at,
             isNew: new Date(insight.created_at) >= sevenDaysAgo, // Mark insights from last 7 days as "new"
+            userRating: insight.user_rating,
           })),
           summary: {
             totalMetrics: basicMetrics.length,
@@ -475,6 +480,7 @@ router.get(
         generationMetadata: insight.generation_metadata,
         createdAt: insight.created_at,
         updatedAt: insight.updated_at,
+        userRating: insight.user_rating,
       }));
 
       return res.status(200).json({
@@ -625,5 +631,87 @@ router.get("/dashboard", authenticate, async (req: Request, res: Response) => {
     }
   }
 });
+
+/**
+ * @route PUT /api/analytics/insights/:insightId/rating
+ * @desc Rate an AI insight (thumbs up/down)
+ * @access Private
+ */
+router.put(
+  "/insights/:insightId/rating",
+  authenticate,
+  ratingValidation,
+  async (req: Request, res: Response) => {
+    try {
+      checkValidationErrors(req);
+
+      const userId = req.user!.id;
+      const insightId = req.params.insightId as string;
+      const { rating } = req.body;
+
+      // Validate rating value
+      if (rating !== true && rating !== false && rating !== null) {
+        throw new ApiError(
+          "Rating must be true (thumbs up), false (thumbs down), or null (no rating)",
+          400,
+        );
+      }
+
+      logger.info(`User ${userId} rating insight ${insightId}: ${rating}`);
+
+      // Verify the insight exists and belongs to a user's account
+      const { Repository } = await import("../database/repository");
+      const aiAnalysisRepo = new Repository("ai_analysis");
+
+      const insight = (await aiAnalysisRepo.executeQuery(
+        `SELECT a.id, a.user_id 
+         FROM ai_analysis a 
+         WHERE a.id = $1`,
+        [insightId],
+      )) as Array<{ id: string; user_id: string }>;
+
+      if (!insight || insight.length === 0) {
+        throw new ApiError("Insight not found", 404);
+      }
+
+      if (insight[0]?.user_id !== userId) {
+        throw new ApiError("Access denied: Not your insight", 403);
+      }
+
+      // Update the rating
+      await aiAnalysisRepo.executeQuery(
+        `UPDATE ai_analysis 
+         SET user_rating = $1, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2`,
+        [rating, insightId],
+      );
+
+      logger.info(`Rating updated successfully for insight ${insightId}`);
+
+      return res.status(200).json({
+        success: true,
+        message: "Rating updated successfully",
+        data: {
+          insightId,
+          rating,
+          updatedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+        });
+      } else {
+        logger.error("Update insight rating error:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+        });
+      }
+    }
+  },
+);
 
 export default router;

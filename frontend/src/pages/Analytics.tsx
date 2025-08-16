@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { SocialAccount, AccountMetrics, AIInsight } from '../types';
 import apiClient from '../services/api';
 import { ChartBarIcon, LightBulbIcon } from '@heroicons/react/24/outline';
+import { FeedbackButtons } from '../components/FeedbackButtons';
 
 export const Analytics: React.FC = () => {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
@@ -133,6 +134,24 @@ export const Analytics: React.FC = () => {
       setInsights(existingInsights);
     } finally {
       setGeneratingFreshInsights(false);
+    }
+  };
+
+  const handleInsightRating = async (insightId: string, rating: boolean) => {
+    try {
+      await apiClient.rateInsight(insightId, rating);
+      
+      // Update the insight in the state
+      setInsights(prevInsights => 
+        prevInsights.map(insight => 
+          insight.id === insightId 
+            ? { ...insight, userRating: rating }
+            : insight
+        )
+      );
+    } catch (err: any) {
+      console.error('Failed to rate insight:', err.message);
+      // Could show a toast notification here
     }
   };
 
@@ -501,20 +520,26 @@ export const Analytics: React.FC = () => {
                                     )}
 
                                     <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
-                                      <span
-                                        className={`font-medium ${
-                                          (insight.confidence || 0) >= 0.8
-                                            ? 'text-green-600'
-                                            : (insight.confidence || 0) >= 0.6
-                                              ? 'text-yellow-600'
-                                              : 'text-gray-500'
-                                        }`}
-                                      >
-                                        {Math.round(
-                                          (insight.confidence || 0) * 100
-                                        )}
-                                        % confidence
-                                      </span>
+                                      <div className="flex items-center gap-4">
+                                        <span
+                                          className={`font-medium ${
+                                            (insight.confidence || 0) >= 0.8
+                                              ? 'text-green-600'
+                                              : (insight.confidence || 0) >= 0.6
+                                                ? 'text-yellow-600'
+                                                : 'text-gray-500'
+                                          }`}
+                                        >
+                                          {Math.round(
+                                            (insight.confidence || 0) * 100
+                                          )}
+                                          % confidence
+                                        </span>
+                                        <FeedbackButtons
+                                          rating={insight.userRating ?? null}
+                                          onRating={(rating) => handleInsightRating(insight.id, rating)}
+                                        />
+                                      </div>
                                       <span>
                                         {new Date(
                                           insight.createdAt
@@ -707,20 +732,26 @@ export const Analytics: React.FC = () => {
                                   )}
 
                                   <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
-                                    <span
-                                      className={`font-medium ${
-                                        (insight.confidence || 0) >= 0.8
-                                          ? 'text-green-600'
-                                          : (insight.confidence || 0) >= 0.6
-                                            ? 'text-yellow-600'
-                                            : 'text-gray-500'
-                                      }`}
-                                    >
-                                      {Math.round(
-                                        (insight.confidence || 0) * 100
-                                      )}
-                                      % confidence
-                                    </span>
+                                    <div className="flex items-center gap-4">
+                                      <span
+                                        className={`font-medium ${
+                                          (insight.confidence || 0) >= 0.8
+                                            ? 'text-green-600'
+                                            : (insight.confidence || 0) >= 0.6
+                                              ? 'text-yellow-600'
+                                              : 'text-gray-500'
+                                        }`}
+                                      >
+                                        {Math.round(
+                                          (insight.confidence || 0) * 100
+                                        )}
+                                        % confidence
+                                      </span>
+                                      <FeedbackButtons
+                                        rating={insight.userRating ?? null}
+                                        onRating={(rating) => handleInsightRating(insight.id, rating)}
+                                      />
+                                    </div>
                                     <span>
                                       {new Date(
                                         insight.createdAt

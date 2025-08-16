@@ -137,6 +137,7 @@ export interface AIInsight {
   createdAt: string;
   updatedAt: string;
   isNew?: boolean; // Added to distinguish new vs previous insights
+  userRating?: boolean | null; // User feedback: true=thumbs up, false=thumbs down, null=no rating
 }
 
 export interface TierLimits {
