@@ -1,5 +1,11 @@
 import { setTimeout } from "timers";
-import { ApiError } from "../utils/errors";
+import {
+  ApiError,
+  LLMProviderError,
+  DataRetrievalError,
+  InsightProcessingError,
+} from "../utils/errors";
+import { RetryHandler } from "../utils/retry";
 import { logger } from "../logger";
 import { TIME_INTERVALS } from "../config/constants";
 import { LLMClientService } from "./llm-client.service";
@@ -104,19 +110,55 @@ export class AIInsightsService {
       );
       return insights;
     } catch (error) {
-      logger.error(
-        `Failed to generate insights for account ${socialAccountId}:`,
-        error,
-      );
+      const errorMessage = `Failed to generate insights for account ${socialAccountId}`;
 
-      if (error instanceof ApiError) {
+      // Log error with appropriate level based on type
+      if (
+        error instanceof LLMProviderError ||
+        error instanceof DataRetrievalError
+      ) {
+        logger.warn(`${errorMessage} (retryable):`, error);
+      } else {
+        logger.error(`${errorMessage}:`, error);
+      }
+
+      // Re-throw specific error types
+      if (
+        error instanceof LLMProviderError ||
+        error instanceof DataRetrievalError ||
+        error instanceof InsightProcessingError ||
+        error instanceof ApiError
+      ) {
         throw error;
       }
 
-      throw new ApiError(
-        `Failed to generate insights for account: ${socialAccountId}`,
-        500,
-      );
+      // Categorize unknown errors
+      if (error instanceof Error) {
+        const errorName = error.name.toLowerCase();
+        const errorMessage = error.message.toLowerCase();
+
+        // Network/connection errors
+        if (
+          errorName.includes("network") ||
+          errorName.includes("timeout") ||
+          errorMessage.includes("econnreset") ||
+          errorMessage.includes("socket hang up")
+        ) {
+          throw LLMProviderError.connectionError();
+        }
+
+        // JSON/parsing errors
+        if (
+          errorName.includes("syntaxerror") ||
+          errorMessage.includes("unexpected token") ||
+          errorMessage.includes("invalid json")
+        ) {
+          throw LLMProviderError.invalidResponse(error.message);
+        }
+      }
+
+      // Default fallback error
+      throw new ApiError(errorMessage, 500);
     }
   }
 
@@ -136,7 +178,11 @@ export class AIInsightsService {
     }
 
     // Step 2: Get posts for analysis (with fallback to fresh data)
-    const posts = await this.getPostsForAnalysis(socialAccountId, username);
+    const posts = await RetryHandler.forDataRetrieval().execute(
+      () => this.getPostsForAnalysis(socialAccountId, username),
+      {},
+      "data retrieval for posts analysis",
+    );
 
     // Step 3: Check if there are any existing insights to provide context
     const hasExistingInsights = await this.checkForExistingInsights(
@@ -159,25 +205,39 @@ export class AIInsightsService {
       logger.info(
         "AI INSIGHTS: Existing insights found - generating context-aware insights...",
       );
-      llmResponse = await this.llmClient.generateInsightsWithContext(
-        systemPrompt,
-        userPrompt,
-        userId,
-        socialAccountId,
+      llmResponse = await RetryHandler.forAIInsights().execute(
+        () =>
+          this.llmClient.generateInsightsWithContext(
+            systemPrompt,
+            userPrompt,
+            userId,
+            socialAccountId,
+          ),
+        {},
+        "LLM context-aware insights generation",
       );
     } else {
       logger.info(
         "AI INSIGHTS: No existing insights found - generating first-time insights...",
       );
-      llmResponse = await this.llmClient.generateInsights(
-        systemPrompt,
-        userPrompt,
+      llmResponse = await RetryHandler.forAIInsights().execute(
+        () => this.llmClient.generateInsights(systemPrompt, userPrompt),
+        {},
+        "LLM first-time insights generation",
       );
     }
 
     // Step 6: Process LLM response
-    const insights = this.responseProcessor.parseInsightResponse(llmResponse);
-    logger.info(`AI INSIGHTS: LLM generated ${insights.length} raw insights`);
+    let insights;
+    try {
+      insights = this.responseProcessor.parseInsightResponse(llmResponse);
+      logger.info(`AI INSIGHTS: LLM generated ${insights.length} raw insights`);
+    } catch (error) {
+      logger.error("AI INSIGHTS: Failed to parse LLM response:", error);
+      throw InsightProcessingError.parseError(
+        error instanceof Error ? error.message : "Unknown parsing error",
+      );
+    }
 
     // Step 7: Convert to database format and store
     const storedInsights: AIAnalysisDB[] = [];
@@ -187,15 +247,49 @@ export class AIInsightsService {
     };
 
     for (const insight of insights) {
-      logger.info(`AI INSIGHTS: Storing insight: ${insight.title}`);
-      const dbInsight = this.responseProcessor.convertInsightToDbFormat(
-        userId,
-        socialAccountId,
-        insight,
-        supportingData,
-      );
-      const stored = await this.dataService.storeInsight(dbInsight);
-      storedInsights.push(stored);
+      try {
+        logger.info(`AI INSIGHTS: Storing insight: ${insight.title}`);
+
+        // Convert insight to database format with validation
+        const dbInsight = this.responseProcessor.convertInsightToDbFormat(
+          userId,
+          socialAccountId,
+          insight,
+          supportingData,
+        );
+
+        // Store insight with retry logic for database operations
+        const stored = await RetryHandler.execute(
+          () => this.dataService.storeInsight(dbInsight),
+          { maxAttempts: 2, initialDelayMs: 500 },
+          `storing insight: ${insight.title}`,
+        );
+
+        storedInsights.push(stored);
+      } catch (error) {
+        logger.error(
+          `AI INSIGHTS: Failed to store insight '${insight.title}':`,
+          error,
+        );
+
+        // If insight conversion fails, it's a processing error
+        if (error instanceof Error && error.message.includes("validation")) {
+          throw InsightProcessingError.validationError(
+            `Failed to validate insight '${insight.title}': ${error.message}`,
+          );
+        }
+
+        // Database storage errors are typically retryable
+        if (!(error instanceof ApiError)) {
+          throw new DataRetrievalError(
+            `Failed to store insight '${insight.title}': ${error instanceof Error ? error.message : "Unknown error"}`,
+            500,
+            true,
+          );
+        }
+
+        throw error;
+      }
     }
 
     return storedInsights;
@@ -247,35 +341,94 @@ export class AIInsightsService {
     socialAccountId: string,
     username: string,
   ): Promise<any[]> {
-    let posts = await this.dataService.getPostsForAnalysis(username);
-
-    if (posts.length === 0) {
-      // No posts found - trigger fresh Apify sync
-      logger.info("No Apify posts found - triggering fresh sync...");
-
-      await apifyService.instance.collectInstagramMetrics(
-        socialAccountId,
-        username,
-      );
-
-      // Wait for processing
-      logger.info(
-        `Waiting ${TIME_INTERVALS.APIFY_DATA_PROCESSING_DELAY_MS / 1000} seconds for Apify data to be processed...`,
-      );
-      await new Promise((resolve) =>
-        setTimeout(resolve, TIME_INTERVALS.APIFY_DATA_PROCESSING_DELAY_MS),
-      );
-
-      // Retry fetching posts
-      posts = await this.dataService.getPostsForAnalysis(username);
+    try {
+      let posts = await this.dataService.getPostsForAnalysis(username);
 
       if (posts.length === 0) {
-        throw new ApiError("Failed to collect Instagram data via Apify", 500);
-      }
-    }
+        // No posts found - trigger fresh Apify sync
+        logger.info("No Apify posts found - triggering fresh sync...");
 
-    logger.info(`AI INSIGHTS: Retrieved ${posts.length} posts for analysis`);
-    return posts;
+        try {
+          await apifyService.instance.collectInstagramMetrics(
+            socialAccountId,
+            username,
+          );
+        } catch (error) {
+          logger.error("AI INSIGHTS: Apify data collection failed:", error);
+          throw DataRetrievalError.apifyError(
+            error instanceof Error ? error.message : "Unknown Apify error",
+          );
+        }
+
+        // Wait for processing
+        logger.info(
+          `Waiting ${TIME_INTERVALS.APIFY_DATA_PROCESSING_DELAY_MS / 1000} seconds for Apify data to be processed...`,
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, TIME_INTERVALS.APIFY_DATA_PROCESSING_DELAY_MS),
+        );
+
+        // Retry fetching posts
+        try {
+          posts = await this.dataService.getPostsForAnalysis(username);
+        } catch (error) {
+          logger.error(
+            "AI INSIGHTS: Failed to fetch posts after Apify sync:",
+            error,
+          );
+          throw new DataRetrievalError(
+            "Failed to retrieve posts after data collection",
+            503,
+            true,
+          );
+        }
+
+        if (posts.length === 0) {
+          throw DataRetrievalError.insufficientData();
+        }
+      }
+
+      // Validate that posts have the required data for analysis
+      const validPosts = posts.filter(
+        (post) =>
+          post &&
+          typeof post === "object" &&
+          post.id &&
+          (post.likes || post.likes === 0) &&
+          (post.comments || post.comments === 0),
+      );
+
+      if (validPosts.length === 0) {
+        throw DataRetrievalError.insufficientData();
+      }
+
+      if (validPosts.length < posts.length) {
+        logger.warn(
+          `AI INSIGHTS: Filtered out ${posts.length - validPosts.length} invalid posts, ${validPosts.length} remain`,
+        );
+      }
+
+      logger.info(
+        `AI INSIGHTS: Retrieved ${validPosts.length} valid posts for analysis`,
+      );
+      return validPosts;
+    } catch (error) {
+      // Re-throw our specific errors
+      if (error instanceof DataRetrievalError || error instanceof ApiError) {
+        throw error;
+      }
+
+      // Wrap unexpected errors
+      logger.error(
+        "AI INSIGHTS: Unexpected error during post retrieval:",
+        error,
+      );
+      throw new DataRetrievalError(
+        `Unexpected error retrieving posts: ${error instanceof Error ? error.message : "Unknown error"}`,
+        500,
+        false,
+      );
+    }
   }
 
   /**
