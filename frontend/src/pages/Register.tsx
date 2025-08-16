@@ -2,8 +2,12 @@ import React from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeftIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import { registerSchema, RegisterFormData } from '../utils/validation';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card';
 
 export const Register: React.FC = () => {
   const { register: registerUser, isAuthenticated } = useAuth();
@@ -39,128 +43,125 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Create your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <Link
-              to="/login"
-              className="font-medium text-blue-600 hover:text-blue-500"
-            >
-              sign in to existing account
-            </Link>
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      {/* Back to home link */}
+      <div className="absolute top-8 left-8">
+        <Link 
+          to="/" 
+          className="inline-flex items-center text-gray-600 hover:text-gray-900 font-medium transition-colors"
+        >
+          <ArrowLeftIcon className="w-4 h-4 mr-2" />
+          Back to home
+        </Link>
+      </div>
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Social Master Lite</h1>
+          <p className="mt-2 text-gray-600">Join thousands of creators</p>
         </div>
         
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          {errors.root && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="text-sm text-red-700">{errors.root.message}</div>
-            </div>
-          )}
+        <Card className="shadow-xl border-0">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Create your account</CardTitle>
+            <CardDescription>
+              Already have an account?{' '}
+              <Link
+                to="/login"
+                className="font-medium text-primary-500 hover:text-primary-600 transition-colors"
+              >
+                Sign in here
+              </Link>
+            </CardDescription>
+          </CardHeader>
           
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Full Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                autoComplete="name"
-                className={`mt-1 appearance-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                  errors.name ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Enter your full name"
-                {...register('name')}
-              />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+          <CardContent>
+            <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+              {errors.root && (
+                <div className="rounded-lg bg-error-50 border border-error-200 p-4">
+                  <div className="text-sm text-error-700">{errors.root.message}</div>
+                </div>
               )}
-            </div>
-            
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                className={`mt-1 appearance-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                  errors.email ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Enter your email"
-                {...register('email')}
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-              )}
-            </div>
-            
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                className={`mt-1 appearance-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                  errors.password ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Create a password"
-                {...register('password')}
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-              <p className="mt-1 text-xs text-gray-500">
-                Must be 8+ characters with uppercase, lowercase, number, and special character
-              </p>
-            </div>
-            
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                className={`mt-1 appearance-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                  errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Confirm your password"
-                {...register('confirmPassword')}
-              />
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
-              )}
-            </div>
-          </div>
+              
+              <div className="space-y-4">
+                <Input
+                  id="name"
+                  type="text"
+                  label="Full Name"
+                  placeholder="Enter your full name"
+                  autoComplete="name"
+                  error={errors.name?.message}
+                  {...register('name')}
+                />
+                
+                <Input
+                  id="email"
+                  type="email"
+                  label="Email Address"
+                  placeholder="Enter your email"
+                  autoComplete="email"
+                  error={errors.email?.message}
+                  {...register('email')}
+                />
+                
+                <Input
+                  id="password"
+                  type="password"
+                  label="Password"
+                  placeholder="Create a password"
+                  autoComplete="new-password"
+                  error={errors.password?.message}
+                  helperText="Must be 8+ characters with uppercase, lowercase, number, and special character"
+                  {...register('password')}
+                />
+                
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  label="Confirm Password"
+                  placeholder="Confirm your password"
+                  autoComplete="new-password"
+                  error={errors.confirmPassword?.message}
+                  {...register('confirmPassword')}
+                />
+              </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Creating account...' : 'Create account'}
-            </button>
-          </div>
-          
-          <div className="text-center">
-            <p className="text-xs text-gray-500">
-              By creating an account, you agree to our terms and conditions.
-              New accounts require manual approval by an administrator.
-            </p>
-          </div>
-        </form>
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                loading={isSubmitting}
+              >
+                {isSubmitting ? 'Creating account...' : 'Create account'}
+              </Button>
+              
+              <div className="bg-primary-50 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <CheckIcon className="w-5 h-5 text-primary-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-primary-900">Manual Approval Required</p>
+                    <p className="text-sm text-primary-700 mt-1">
+                      New accounts require administrator approval for security. You'll receive an email once your account is activated.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <p className="text-xs text-gray-500">
+                  By creating an account, you agree to our{' '}
+                  <a href="#" className="text-primary-500 hover:text-primary-600">terms of service</a>
+                  {' '}and{' '}
+                  <a href="#" className="text-primary-500 hover:text-primary-600">privacy policy</a>.
+                </p>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+        
+        <p className="mt-8 text-center text-sm text-gray-500">
+          🔒 Your data is encrypted and secure
+        </p>
       </div>
     </div>
   );

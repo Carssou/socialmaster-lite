@@ -26,10 +26,43 @@
 .bg-primary-50 { background-color: var(--color-primary-50) !important; }
 .bg-primary-100 { background-color: var(--color-primary-100) !important; }
 .bg-primary-500 { background-color: var(--color-primary-500) !important; }
+.bg-primary-600 { background-color: var(--color-primary-600) !important; }
 .text-primary-500 { color: var(--color-primary-500) !important; }
+.text-primary-600 { color: var(--color-primary-600) !important; }
 .text-primary-700 { color: var(--color-primary-700) !important; }
+.text-primary-900 { color: var(--color-primary-900) !important; }
 .text-white { color: white !important; }
+.border-primary-200 { border-color: var(--color-primary-200) !important; }
+.border-primary-300 { border-color: var(--color-primary-300) !important; }
 .border-primary-500 { border-color: var(--color-primary-500) !important; }
+
+/* Success colors */
+.bg-success-50 { background-color: var(--color-success-50) !important; }
+.bg-success-100 { background-color: var(--color-success-100) !important; }
+.text-success-500 { color: var(--color-success-500) !important; }
+.text-success-600 { color: var(--color-success-500) !important; }
+.text-success-700 { color: var(--color-success-700) !important; }
+
+/* Error colors */
+.bg-error-50 { background-color: #fef2f2 !important; }
+.bg-error-100 { background-color: #fee2e2 !important; }
+.bg-error-200 { background-color: #fecaca !important; }
+.bg-error-500 { background-color: var(--color-error-500) !important; }
+.bg-error-600 { background-color: var(--color-error-600) !important; }
+.text-error-500 { color: var(--color-error-500) !important; }
+.text-error-600 { color: var(--color-error-600) !important; }
+.text-error-700 { color: #b91c1c !important; }
+.border-error-200 { border-color: #fecaca !important; }
+
+/* Warning colors */
+.bg-warning-50 { background-color: #fffbeb !important; }
+.bg-warning-100 { background-color: #fef3c7 !important; }
+.text-warning-500 { color: #f59e0b !important; }
+.text-warning-600 { color: #d97706 !important; }
+
+/* Card shadows */
+.shadow-card { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1) !important; }
+.shadow-card-hover { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important; }
 
 /* Active navigation state */
 .nav-active {

@@ -2,8 +2,12 @@ import React from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import { loginSchema, LoginFormData } from '../utils/validation';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card';
 
 export const Login: React.FC = () => {
   const { login, isAuthenticated } = useAuth();
@@ -37,79 +41,94 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <Link
-              to="/register"
-              className="font-medium text-blue-600 hover:text-blue-500"
-            >
-              create a new account
-            </Link>
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      {/* Back to home link */}
+      <div className="absolute top-8 left-8">
+        <Link 
+          to="/" 
+          className="inline-flex items-center text-gray-600 hover:text-gray-900 font-medium transition-colors"
+        >
+          <ArrowLeftIcon className="w-4 h-4 mr-2" />
+          Back to home
+        </Link>
+      </div>
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Social Master Lite</h1>
+          <p className="mt-2 text-gray-600">Welcome back</p>
         </div>
         
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          {errors.root && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="text-sm text-red-700">{errors.root.message}</div>
-            </div>
-          )}
+        <Card className="shadow-xl border-0">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Sign in to your account</CardTitle>
+            <CardDescription>
+              Don't have an account?{' '}
+              <Link
+                to="/register"
+                className="font-medium text-primary-500 hover:text-primary-600 transition-colors"
+              >
+                Create one here
+              </Link>
+            </CardDescription>
+          </CardHeader>
           
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                className={`appearance-none rounded-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${
-                  errors.email ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Email address"
-                {...register('email')}
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+          <CardContent>
+            <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+              {errors.root && (
+                <div className="rounded-lg bg-error-50 border border-error-200 p-4">
+                  <div className="text-sm text-error-700">{errors.root.message}</div>
+                </div>
               )}
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                className={`appearance-none rounded-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${
-                  errors.password ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Password"
-                {...register('password')}
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
-          </div>
+              
+              <div className="space-y-4">
+                <Input
+                  id="email"
+                  type="email"
+                  label="Email address"
+                  placeholder="Enter your email"
+                  autoComplete="email"
+                  error={errors.email?.message}
+                  {...register('email')}
+                />
+                
+                <Input
+                  id="password"
+                  type="password"
+                  label="Password"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  error={errors.password?.message}
+                  {...register('password')}
+                />
+              </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Signing in...' : 'Sign in'}
-            </button>
-          </div>
-        </form>
+              <div className="flex items-center justify-between">
+                <div className="text-sm">
+                  <a
+                    href="#"
+                    className="font-medium text-primary-500 hover:text-primary-600 transition-colors"
+                  >
+                    Forgot your password?
+                  </a>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                loading={isSubmitting}
+              >
+                {isSubmitting ? 'Signing in...' : 'Sign in'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+        
+        <p className="mt-8 text-center text-sm text-gray-500">
+          Secure sign-in with enterprise-grade encryption
+        </p>
       </div>
     </div>
   );
