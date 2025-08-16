@@ -258,10 +258,13 @@ router.get(
       );
 
       // Find insights created within the configurable threshold (for "new" marking in UI)
+      // Use day-level comparison instead of timestamp-level for more intuitive behavior
       const now = new Date();
-      const newInsightThresholdMs =
-        TIME_INTERVALS.NEW_INSIGHT_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
-      const thresholdDate = new Date(now.getTime() - newInsightThresholdMs);
+      now.setHours(0, 0, 0, 0); // Start of today
+      const thresholdDate = new Date(now);
+      thresholdDate.setDate(
+        thresholdDate.getDate() - TIME_INTERVALS.NEW_INSIGHT_THRESHOLD_DAYS,
+      );
 
       // Sort by creation date (newest first)
       const insights = uniqueInsights.sort(
@@ -284,18 +287,27 @@ router.get(
             confidence: insight.confidence / 100, // Convert to decimal for frontend
             priority: insight.impact,
             createdAt: insight.created_at,
-            isNew: new Date(insight.created_at) >= thresholdDate, // Mark recent insights as "new" based on configurable threshold
+            isNew: (() => {
+              // Compare at day level for more intuitive "new" marking
+              const insightDate = new Date(insight.created_at);
+              insightDate.setHours(0, 0, 0, 0); // Start of insight's day
+              return insightDate > thresholdDate;
+            })(), // Mark recent insights as "new" based on configurable threshold (day-level comparison)
             userRating: insight.user_rating,
           })),
           summary: {
             totalMetrics: basicMetrics.length,
             totalInsights: insights.length,
-            newInsights: insights.filter(
-              (i) => new Date(i.created_at) >= thresholdDate,
-            ).length,
-            previousInsights: insights.filter(
-              (i) => new Date(i.created_at) < thresholdDate,
-            ).length,
+            newInsights: insights.filter((i) => {
+              const insightDate = new Date(i.created_at);
+              insightDate.setHours(0, 0, 0, 0);
+              return insightDate > thresholdDate;
+            }).length,
+            previousInsights: insights.filter((i) => {
+              const insightDate = new Date(i.created_at);
+              insightDate.setHours(0, 0, 0, 0);
+              return insightDate <= thresholdDate;
+            }).length,
             lastUpdated: posts[0]!.last_updated_at,
             dataSource: "apify_posts",
             dataIsFresh: hasRecentScraping,
