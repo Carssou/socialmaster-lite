@@ -459,9 +459,12 @@ export class LLMAnalystQueryService {
    * Count analyses for a social account (for existence checks)
    */
   async countAccountAnalyses(socialAccountId: string): Promise<number> {
-    const result = await this.executeWhitelistedQuery("count_account_analyses", {
-      socialAccountId,
-    });
+    const result = await this.executeWhitelistedQuery(
+      "count_account_analyses",
+      {
+        socialAccountId,
+      },
+    );
     return result.data[0]?.count || 0;
   }
 

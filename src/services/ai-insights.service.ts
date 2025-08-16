@@ -221,7 +221,8 @@ export class AIInsightsService {
       }
 
       // Check for ANY insights for this specific account
-      const accountCount = await llmAnalystQueryService.countAccountAnalyses(socialAccountId);
+      const accountCount =
+        await llmAnalystQueryService.countAccountAnalyses(socialAccountId);
       if (accountCount > 0) {
         logger.info(
           `AI INSIGHTS: Found ${accountCount} existing insights for account in database`,

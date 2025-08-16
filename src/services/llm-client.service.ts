@@ -21,6 +21,18 @@ interface LLMFunction {
  * Now supports function calling for analyst queries
  */
 export class LLMClientService {
+  private readonly requiredApiKeys: Map<string, string>;
+
+  constructor() {
+    // Define required API keys for each provider
+    this.requiredApiKeys = new Map([
+      ["openai", "OPENAI_API_KEY"],
+      ["anthropic", "ANTHROPIC_API_KEY"],
+    ]);
+
+    // Validate configuration immediately on instantiation
+    this.validateConfiguration();
+  }
   /**
    * Define analyst query functions available to the LLM
    */
@@ -171,11 +183,7 @@ export class LLMClientService {
     userId: string,
     socialAccountId?: string,
   ): Promise<string> {
-    const provider = process.env.LLM_PROVIDER?.toLowerCase();
-
-    if (!provider) {
-      throw new Error("LLM_PROVIDER environment variable not set");
-    }
+    const provider = this.getValidatedProvider();
 
     try {
       switch (provider) {
@@ -212,11 +220,7 @@ export class LLMClientService {
     systemPrompt: string,
     userPrompt: string,
   ): Promise<string> {
-    const provider = process.env.LLM_PROVIDER?.toLowerCase();
-
-    if (!provider) {
-      throw new Error("LLM_PROVIDER environment variable not set");
-    }
+    const provider = this.getValidatedProvider();
 
     try {
       switch (provider) {
@@ -240,13 +244,11 @@ export class LLMClientService {
     systemPrompt: string,
     userPrompt: string,
   ): Promise<string> {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY environment variable not set");
-    }
+    const apiKey = this.getApiKey("openai");
 
     const { OpenAI } = await import("openai");
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: apiKey,
     });
 
     const model = process.env.OPENAI_MODEL || LLM_CONFIG.DEFAULT_OPENAI_MODEL;
@@ -295,13 +297,11 @@ export class LLMClientService {
     systemPrompt: string,
     userPrompt: string,
   ): Promise<string> {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY environment variable not set");
-    }
+    const apiKey = this.getApiKey("anthropic");
 
     const { Anthropic } = await import("@anthropic-ai/sdk");
     const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: apiKey,
     });
 
     const model =
@@ -336,13 +336,11 @@ export class LLMClientService {
     userId: string,
     socialAccountId?: string,
   ): Promise<string> {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY environment variable not set");
-    }
+    const apiKey = this.getApiKey("openai");
 
     const { OpenAI } = await import("openai");
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: apiKey,
     });
 
     const model = process.env.OPENAI_MODEL || LLM_CONFIG.DEFAULT_OPENAI_MODEL;
@@ -459,13 +457,11 @@ export class LLMClientService {
     userId: string,
     socialAccountId?: string,
   ): Promise<string> {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY environment variable not set");
-    }
+    const apiKey = this.getApiKey("anthropic");
 
     const { Anthropic } = await import("@anthropic-ai/sdk");
     const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: apiKey,
     });
 
     const model =
@@ -606,31 +602,93 @@ export class LLMClientService {
 
   /**
    * Validate LLM configuration on startup
+   * Ensures all required API keys are present and properly configured
    */
   validateConfiguration(): void {
     const provider = process.env.LLM_PROVIDER?.toLowerCase();
 
+    // Validate provider is set
     if (!provider) {
-      throw new Error("LLM_PROVIDER environment variable is required");
+      throw new Error(
+        "LLM_PROVIDER environment variable is required. Set to 'openai' or 'anthropic'",
+      );
     }
 
+    // Validate provider is supported
+    if (!this.requiredApiKeys.has(provider)) {
+      const supportedProviders = Array.from(this.requiredApiKeys.keys()).join(
+        ", ",
+      );
+      throw new Error(
+        `Unsupported LLM_PROVIDER: '${provider}'. Supported providers: ${supportedProviders}`,
+      );
+    }
+
+    // Validate required API key for the provider
+    const requiredKeyName = this.requiredApiKeys.get(provider);
+    if (!requiredKeyName) {
+      throw new Error(`No API key mapping found for provider: ${provider}`);
+    }
+
+    const apiKey = process.env[requiredKeyName];
+    if (!apiKey || apiKey.trim().length === 0) {
+      throw new Error(
+        `${requiredKeyName} environment variable is required when using ${provider} provider`,
+      );
+    }
+
+    // Provider-specific API key format validation
     switch (provider) {
       case "openai":
-        if (!process.env.OPENAI_API_KEY) {
-          throw new Error(
-            "OPENAI_API_KEY is required when using OpenAI provider",
+        if (!apiKey.startsWith("sk-")) {
+          logger.warn(
+            "OPENAI_API_KEY should start with 'sk-'. Please verify your API key is correct.",
           );
         }
         break;
       case "anthropic":
-        if (!process.env.ANTHROPIC_API_KEY) {
-          throw new Error(
-            "ANTHROPIC_API_KEY is required when using Anthropic provider",
+        if (!apiKey.startsWith("sk-ant-")) {
+          logger.warn(
+            "ANTHROPIC_API_KEY should start with 'sk-ant-'. Please verify your API key is correct.",
           );
         }
         break;
-      default:
-        throw new Error(`Unsupported LLM_PROVIDER: ${provider}`);
     }
+
+    logger.info(
+      `LLM Provider '${provider}' configuration validated successfully`,
+    );
+  }
+
+  /**
+   * Get the current provider with validation
+   */
+  private getValidatedProvider(): string {
+    const provider = process.env.LLM_PROVIDER?.toLowerCase();
+    if (!provider) {
+      throw new Error(
+        "LLM_PROVIDER not configured. Service initialization failed.",
+      );
+    }
+    return provider;
+  }
+
+  /**
+   * Securely get API key for the current provider
+   */
+  private getApiKey(provider: string): string {
+    const keyName = this.requiredApiKeys.get(provider);
+    if (!keyName) {
+      throw new Error(`Unknown provider: ${provider}`);
+    }
+
+    const apiKey = process.env[keyName];
+    if (!apiKey || apiKey.trim().length === 0) {
+      throw new Error(
+        `${keyName} not configured. Please check your environment variables.`,
+      );
+    }
+
+    return apiKey;
   }
 }
