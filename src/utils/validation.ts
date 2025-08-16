@@ -72,8 +72,7 @@ export function validateHashtags(hashtags: unknown): string[] {
 
   return hashtags
     .filter((tag): tag is string => typeof tag === "string")
-    .map((tag) => tag.trim().toLowerCase())
-    .filter((tag) => tag.length > 0 && tag.startsWith("#"))
+    .filter((tag) => tag.trim().length > 0)
     .slice(0, VALIDATION_LIMITS.MAX_HASHTAGS_PER_POST);
 }
 
@@ -89,8 +88,7 @@ export function validateMentions(mentions: unknown): string[] {
 
   return mentions
     .filter((mention): mention is string => typeof mention === "string")
-    .map((mention) => mention.trim().toLowerCase())
-    .filter((mention) => mention.length > 0 && mention.startsWith("@"))
+    .filter((mention) => mention.trim().length > 0)
     .slice(0, VALIDATION_LIMITS.MAX_MENTIONS_PER_POST);
 }
 

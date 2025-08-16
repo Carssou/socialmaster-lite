@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { SocialAccount, AccountMetrics, AIInsight } from '../types';
 import apiClient from '../services/api';
 import { ChartBarIcon, LightBulbIcon } from '@heroicons/react/24/outline';
+import { FeedbackButtons } from '../components/FeedbackButtons';
 
 export const Analytics: React.FC = () => {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
@@ -10,6 +11,7 @@ export const Analytics: React.FC = () => {
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingInsights, setGeneratingInsights] = useState(false);
+  const [generatingFreshInsights, setGeneratingFreshInsights] = useState(false);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
@@ -39,6 +41,12 @@ export const Analytics: React.FC = () => {
   };
 
   const loadAccountData = async (accountId: string) => {
+    // Prevent concurrent data loading requests
+    if (loading || generatingInsights) {
+      console.log('ANALYTICS: Already loading account data, ignoring duplicate request');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(''); // Clear previous errors
@@ -62,24 +70,25 @@ export const Analytics: React.FC = () => {
       // Now trigger metrics and new insights generation while showing existing insights
       setGeneratingInsights(true);
       try {
-        const { metrics, insights } =
+        const { metrics, insights: newInsights } =
           await apiClient.getAccountMetricsAndInsights(accountId);
 
         setMetrics(metrics);
-        setInsights(insights);
+        // Preserve existing insights while adding new ones
+        setInsights(newInsights);
 
         // Debug logging
         console.log(
           'ANALYTICS DEBUG: Total insights after generation:',
-          insights.length
+          newInsights.length
         );
         console.log(
           'ANALYTICS DEBUG: New insights:',
-          insights.filter((i) => i.isNew).length
+          newInsights.filter((i) => i.isNew).length
         );
         console.log(
           'ANALYTICS DEBUG: Previous insights:',
-          insights.filter((i) => !i.isNew).length
+          newInsights.filter((i) => !i.isNew).length
         );
 
         // If no metrics, show helpful message
@@ -97,6 +106,64 @@ export const Analytics: React.FC = () => {
       setLoading(false);
     } finally {
       setGeneratingInsights(false);
+    }
+  };
+
+  const generateFreshInsights = async (accountId: string) => {
+    // Prevent concurrent generation requests
+    if (generatingFreshInsights) {
+      console.log('ANALYTICS: Already generating fresh insights, ignoring duplicate request');
+      return;
+    }
+    
+    // Store existing insights to preserve them during generation
+    const existingInsights = [...insights];
+    
+    try {
+      setGeneratingFreshInsights(true);
+      setError('');
+      
+      // Trigger fresh scraping + AI insights with forceRefresh=true (2-day minimum)
+      // Backend handles the 1-minute buffer between Apify and LLM automatically
+      console.log('ANALYTICS: Triggering fresh Instagram scraping...');
+      await apiClient.syncAccountData(accountId);
+      
+      console.log('ANALYTICS: Generating fresh AI insights...');
+      const freshInsights = await apiClient.getAIInsights(accountId, true);
+      
+      // Combine existing insights with fresh ones, ensuring existing ones remain visible
+      setInsights(freshInsights);
+      
+      // Refresh metrics to show latest data
+      const { metrics } = await apiClient.getAccountMetricsAndInsights(accountId);
+      setMetrics(metrics);
+      
+      console.log('ANALYTICS: Generated fresh insights:', freshInsights.length);
+    } catch (err: any) {
+      console.warn('Failed to generate fresh insights:', err.message);
+      setError(err.message || 'Failed to generate fresh insights. Please try again later.');
+      // Restore existing insights on error to ensure they don't disappear
+      setInsights(existingInsights);
+    } finally {
+      setGeneratingFreshInsights(false);
+    }
+  };
+
+  const handleInsightRating = async (insightId: string, rating: boolean) => {
+    try {
+      await apiClient.rateInsight(insightId, rating);
+      
+      // Update the insight in the state
+      setInsights(prevInsights => 
+        prevInsights.map(insight => 
+          insight.id === insightId 
+            ? { ...insight, userRating: rating }
+            : insight
+        )
+      );
+    } catch (err: any) {
+      console.error('Failed to rate insight:', err.message);
+      // Could show a toast notification here
     }
   };
 
@@ -147,22 +214,16 @@ export const Analytics: React.FC = () => {
           {selectedAccount && (
             <div className="flex justify-end mb-4">
               <button
-                onClick={async () => {
-                  try {
-                    setLoading(true);
-                    await apiClient.syncAccountData(selectedAccount);
-                    await loadAccountData(selectedAccount);
-                    setError('');
-                  } catch (err: any) {
-                    setError(err.message || 'Failed to sync account data');
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                disabled={loading}
+                onClick={() => generateFreshInsights(selectedAccount)}
+                disabled={generatingFreshInsights || generatingInsights || loading}
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                {loading ? 'Syncing...' : 'Sync Account Data'}
+                {generatingFreshInsights 
+                  ? 'Generating Fresh Insights...' 
+                  : generatingInsights 
+                    ? 'Generating Insights...' 
+                    : 'Generate Fresh Insights'
+                }
               </button>
             </div>
           )}
@@ -476,20 +537,26 @@ export const Analytics: React.FC = () => {
                                     )}
 
                                     <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
-                                      <span
-                                        className={`font-medium ${
-                                          (insight.confidence || 0) >= 0.8
-                                            ? 'text-green-600'
-                                            : (insight.confidence || 0) >= 0.6
-                                              ? 'text-yellow-600'
-                                              : 'text-gray-500'
-                                        }`}
-                                      >
-                                        {Math.round(
-                                          (insight.confidence || 0) * 100
-                                        )}
-                                        % confidence
-                                      </span>
+                                      <div className="flex items-center gap-4">
+                                        <span
+                                          className={`font-medium ${
+                                            (insight.confidence || 0) >= 0.8
+                                              ? 'text-green-600'
+                                              : (insight.confidence || 0) >= 0.6
+                                                ? 'text-yellow-600'
+                                                : 'text-gray-500'
+                                          }`}
+                                        >
+                                          {Math.round(
+                                            (insight.confidence || 0) * 100
+                                          )}
+                                          % confidence
+                                        </span>
+                                        <FeedbackButtons
+                                          rating={insight.userRating ?? null}
+                                          onRating={(userRating) => handleInsightRating(insight.id, userRating)}
+                                        />
+                                      </div>
                                       <span>
                                         {new Date(
                                           insight.createdAt
@@ -682,20 +749,26 @@ export const Analytics: React.FC = () => {
                                   )}
 
                                   <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
-                                    <span
-                                      className={`font-medium ${
-                                        (insight.confidence || 0) >= 0.8
-                                          ? 'text-green-600'
-                                          : (insight.confidence || 0) >= 0.6
-                                            ? 'text-yellow-600'
-                                            : 'text-gray-500'
-                                      }`}
-                                    >
-                                      {Math.round(
-                                        (insight.confidence || 0) * 100
-                                      )}
-                                      % confidence
-                                    </span>
+                                    <div className="flex items-center gap-4">
+                                      <span
+                                        className={`font-medium ${
+                                          (insight.confidence || 0) >= 0.8
+                                            ? 'text-green-600'
+                                            : (insight.confidence || 0) >= 0.6
+                                              ? 'text-yellow-600'
+                                              : 'text-gray-500'
+                                        }`}
+                                      >
+                                        {Math.round(
+                                          (insight.confidence || 0) * 100
+                                        )}
+                                        % confidence
+                                      </span>
+                                      <FeedbackButtons
+                                        rating={insight.userRating ?? null}
+                                        onRating={(userRating) => handleInsightRating(insight.id, userRating)}
+                                      />
+                                    </div>
                                     <span>
                                       {new Date(
                                         insight.createdAt

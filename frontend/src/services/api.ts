@@ -269,11 +269,17 @@ class ApiClient {
     return response.data;
   }
 
-  async getAIInsights(accountId: string): Promise<AIInsight[]> {
-    const response: AxiosResponse<ApiResponse<AIInsight[]>> = await this.client.get(
-      `/analytics/accounts/${accountId}/insights`
-    );
+  async getAIInsights(accountId: string, forceRefresh: boolean = false): Promise<AIInsight[]> {
+    const url = forceRefresh 
+      ? `/analytics/accounts/${accountId}/insights?forceRefresh=true`
+      : `/analytics/accounts/${accountId}/insights`;
+    
+    const response: AxiosResponse<ApiResponse<AIInsight[]>> = await this.client.get(url);
     return response.data.data || [];
+  }
+
+  async rateInsight(insightId: string, rating: boolean | null): Promise<void> {
+    await this.client.put(`/analytics/insights/${insightId}/rating`, { rating });
   }
 
   async getDashboardData(): Promise<{

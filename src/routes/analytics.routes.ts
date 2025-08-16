@@ -9,6 +9,7 @@ import apifyService, {
 import aiInsightsService from "../services/ai-insights.service";
 import { ApiError } from "../utils/errors";
 import { logger } from "../logger";
+import { TIME_INTERVALS } from "../config/constants";
 
 const router = Router();
 
@@ -27,6 +28,10 @@ const insightsValidation = [
     .optional()
     .isBoolean()
     .withMessage("Force refresh must be a boolean"),
+];
+
+const ratingValidation = [
+  param("insightId").isUUID().withMessage("Valid insight ID is required"),
 ];
 
 // Helper function to check validation errors
@@ -226,6 +231,7 @@ router.get(
           newInsights = await aiInsightsService.generateAccountInsights(
             userId,
             accountId,
+            false, // Automatic generation (7-day cache)
           );
           logger.info(
             `Generated ${newInsights.length} new insights based on recent scraping from ${currentResults[0]!.created_at}`,
@@ -251,9 +257,11 @@ router.get(
           arr.findIndex((i) => i.id === insight.id) === index,
       );
 
-      // Find insights created within the last 12 hours
+      // Find insights created within the configurable threshold (for "new" marking in UI)
       const now = new Date();
-      const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+      const newInsightThresholdMs =
+        TIME_INTERVALS.NEW_INSIGHT_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+      const thresholdDate = new Date(now.getTime() - newInsightThresholdMs);
 
       // Sort by creation date (newest first)
       const insights = uniqueInsights.sort(
@@ -276,16 +284,17 @@ router.get(
             confidence: insight.confidence / 100, // Convert to decimal for frontend
             priority: insight.impact,
             createdAt: insight.created_at,
-            isNew: new Date(insight.created_at) >= twelveHoursAgo, // Mark insights from last 12 hours as "new"
+            isNew: new Date(insight.created_at) >= thresholdDate, // Mark recent insights as "new" based on configurable threshold
+            userRating: insight.user_rating,
           })),
           summary: {
             totalMetrics: basicMetrics.length,
             totalInsights: insights.length,
             newInsights: insights.filter(
-              (i) => new Date(i.created_at) >= twelveHoursAgo,
+              (i) => new Date(i.created_at) >= thresholdDate,
             ).length,
             previousInsights: insights.filter(
-              (i) => new Date(i.created_at) < twelveHoursAgo,
+              (i) => new Date(i.created_at) < thresholdDate,
             ).length,
             lastUpdated: posts[0]!.last_updated_at,
             dataSource: "apify_posts",
@@ -409,12 +418,13 @@ router.get(
         `Getting AI insights for account: ${accountId}, forceRefresh: ${forceRefresh}`,
       );
 
-      // Get insights (uses 12-hour cache unless forced)
+      // Get insights (uses configurable cache periods from TIME_INTERVALS)
       let insights: any[] = [];
       try {
         insights = await aiInsightsService.generateAccountInsights(
           userId,
           accountId,
+          forceRefresh,
         );
       } catch (error: any) {
         logger.info(`ANALYTICS ROUTE: Caught error generating insights:`, {
@@ -473,6 +483,7 @@ router.get(
         generationMetadata: insight.generation_metadata,
         createdAt: insight.created_at,
         updatedAt: insight.updated_at,
+        userRating: insight.user_rating,
       }));
 
       return res.status(200).json({
@@ -623,5 +634,87 @@ router.get("/dashboard", authenticate, async (req: Request, res: Response) => {
     }
   }
 });
+
+/**
+ * @route PUT /api/analytics/insights/:insightId/rating
+ * @desc Rate an AI insight (thumbs up/down)
+ * @access Private
+ */
+router.put(
+  "/insights/:insightId/rating",
+  authenticate,
+  ratingValidation,
+  async (req: Request, res: Response) => {
+    try {
+      checkValidationErrors(req);
+
+      const userId = req.user!.id;
+      const insightId = req.params.insightId as string;
+      const { rating } = req.body;
+
+      // Validate rating value
+      if (rating !== true && rating !== false && rating !== null) {
+        throw new ApiError(
+          "Rating must be true (thumbs up), false (thumbs down), or null (no rating)",
+          400,
+        );
+      }
+
+      logger.info(`User ${userId} rating insight ${insightId}: ${rating}`);
+
+      // Verify the insight exists and belongs to a user's account
+      const { Repository } = await import("../database/repository");
+      const aiAnalysisRepo = new Repository("ai_analysis");
+
+      const insight = (await aiAnalysisRepo.executeQuery(
+        `SELECT a.id, a.user_id 
+         FROM ai_analysis a 
+         WHERE a.id = $1`,
+        [insightId],
+      )) as Array<{ id: string; user_id: string }>;
+
+      if (!insight || insight.length === 0) {
+        throw new ApiError("Insight not found", 404);
+      }
+
+      if (insight[0]?.user_id !== userId) {
+        throw new ApiError("Access denied: Not your insight", 403);
+      }
+
+      // Update the rating
+      await aiAnalysisRepo.executeQuery(
+        `UPDATE ai_analysis 
+         SET user_rating = $1, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2`,
+        [rating, insightId],
+      );
+
+      logger.info(`Rating updated successfully for insight ${insightId}`);
+
+      return res.status(200).json({
+        success: true,
+        message: "Rating updated successfully",
+        data: {
+          insightId,
+          rating,
+          updatedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+        });
+      } else {
+        logger.error("Update insight rating error:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+        });
+      }
+    }
+  },
+);
 
 export default router;

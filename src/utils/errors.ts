@@ -124,6 +124,166 @@ export class ServiceUnavailableError extends ApiError {
   }
 }
 
+/**
+ * AI Insights specific error types
+ */
+export class LLMProviderError extends ApiError {
+  public readonly retryable: boolean;
+  public readonly retryAfter: number | undefined;
+
+  constructor(
+    message: string,
+    statusCode: number = 503,
+    retryable: boolean = true,
+    retryAfter?: number,
+    correlationId?: string,
+  ) {
+    super(
+      message,
+      statusCode,
+      "LLM_PROVIDER_ERROR",
+      { retryable, retryAfter },
+      correlationId,
+    );
+    this.name = "LLMProviderError";
+    this.retryable = retryable;
+    this.retryAfter = retryAfter;
+  }
+
+  static rateLimited(
+    retryAfter?: number,
+    correlationId?: string,
+  ): LLMProviderError {
+    return new LLMProviderError(
+      "LLM provider rate limit exceeded",
+      429,
+      true,
+      retryAfter || 60,
+      correlationId,
+    );
+  }
+
+  static quotaExceeded(correlationId?: string): LLMProviderError {
+    return new LLMProviderError(
+      "LLM provider quota exceeded",
+      429,
+      false,
+      undefined,
+      correlationId,
+    );
+  }
+
+  static invalidResponse(
+    message: string,
+    correlationId?: string,
+  ): LLMProviderError {
+    return new LLMProviderError(
+      `Invalid LLM response: ${message}`,
+      502,
+      false,
+      undefined,
+      correlationId,
+    );
+  }
+
+  static connectionError(correlationId?: string): LLMProviderError {
+    return new LLMProviderError(
+      "Failed to connect to LLM provider",
+      503,
+      true,
+      30,
+      correlationId,
+    );
+  }
+}
+
+export class DataRetrievalError extends ApiError {
+  public readonly retryable: boolean;
+
+  constructor(
+    message: string,
+    statusCode: number = 503,
+    retryable: boolean = true,
+    correlationId?: string,
+  ) {
+    super(
+      message,
+      statusCode,
+      "DATA_RETRIEVAL_ERROR",
+      { retryable },
+      correlationId,
+    );
+    this.name = "DataRetrievalError";
+    this.retryable = retryable;
+  }
+
+  static insufficientData(correlationId?: string): DataRetrievalError {
+    return new DataRetrievalError(
+      "Insufficient data available for analysis",
+      422,
+      false,
+      correlationId,
+    );
+  }
+
+  static apifyError(
+    message: string,
+    correlationId?: string,
+  ): DataRetrievalError {
+    return new DataRetrievalError(
+      `Apify data retrieval failed: ${message}`,
+      503,
+      true,
+      correlationId,
+    );
+  }
+}
+
+export class InsightProcessingError extends ApiError {
+  public readonly retryable: boolean;
+
+  constructor(
+    message: string,
+    statusCode: number = 500,
+    retryable: boolean = false,
+    correlationId?: string,
+  ) {
+    super(
+      message,
+      statusCode,
+      "INSIGHT_PROCESSING_ERROR",
+      { retryable },
+      correlationId,
+    );
+    this.name = "InsightProcessingError";
+    this.retryable = retryable;
+  }
+
+  static parseError(
+    details: string,
+    correlationId?: string,
+  ): InsightProcessingError {
+    return new InsightProcessingError(
+      `Failed to parse AI response: ${details}`,
+      502,
+      false,
+      correlationId,
+    );
+  }
+
+  static validationError(
+    details: string,
+    correlationId?: string,
+  ): InsightProcessingError {
+    return new InsightProcessingError(
+      `Insight validation failed: ${details}`,
+      422,
+      false,
+      correlationId,
+    );
+  }
+}
+
 import { Request, Response, NextFunction } from "express";
 import { logger } from "../logger";
 // import { BusinessMetrics } from '../services/monitoring/business-metrics'; // Removed enterprise monitoring
