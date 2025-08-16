@@ -41,6 +41,12 @@ export const Analytics: React.FC = () => {
   };
 
   const loadAccountData = async (accountId: string) => {
+    // Prevent concurrent data loading requests
+    if (loading || generatingInsights) {
+      console.log('ANALYTICS: Already loading account data, ignoring duplicate request');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(''); // Clear previous errors
@@ -104,6 +110,12 @@ export const Analytics: React.FC = () => {
   };
 
   const generateFreshInsights = async (accountId: string) => {
+    // Prevent concurrent generation requests
+    if (generatingFreshInsights) {
+      console.log('ANALYTICS: Already generating fresh insights, ignoring duplicate request');
+      return;
+    }
+    
     // Store existing insights to preserve them during generation
     const existingInsights = [...insights];
     
@@ -203,10 +215,15 @@ export const Analytics: React.FC = () => {
             <div className="flex justify-end mb-4">
               <button
                 onClick={() => generateFreshInsights(selectedAccount)}
-                disabled={generatingFreshInsights || loading}
+                disabled={generatingFreshInsights || generatingInsights || loading}
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                {generatingFreshInsights ? 'Generating Fresh Insights...' : 'Generate Fresh Insights'}
+                {generatingFreshInsights 
+                  ? 'Generating Fresh Insights...' 
+                  : generatingInsights 
+                    ? 'Generating Insights...' 
+                    : 'Generate Fresh Insights'
+                }
               </button>
             </div>
           )}
