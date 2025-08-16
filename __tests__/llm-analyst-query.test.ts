@@ -23,73 +23,69 @@ describe("LLMAnalystQueryService", () => {
     jest.clearAllMocks();
   });
 
-  describe("Query validation", () => {
-    it("should allow SELECT queries", async () => {
-      mockExecuteQuery.mockResolvedValue([]);
-      
-      await service.executeQuery("SELECT * FROM ai_analysis");
-      
-      expect(mockExecuteQuery).toHaveBeenCalledWith("SELECT * FROM ai_analysis", []);
-    });
-
-    it("should reject non-SELECT queries", async () => {
+  describe("Security - Whitelist validation", () => {
+    it("should reject non-whitelisted queries", async () => {
       await expect(
-        service.executeQuery("UPDATE ai_analysis SET title = 'test'")
+        service.executeWhitelistedQuery("malicious_query", {})
       ).rejects.toThrow(ApiError);
       
       expect(mockExecuteQuery).not.toHaveBeenCalled();
     });
 
-    it("should reject dangerous keywords", async () => {
+    it("should reject invalid parameters for whitelisted queries", async () => {
       await expect(
-        service.executeQuery("SELECT * FROM ai_analysis WHERE 1=1 UPDATE users SET password='hacked'")
+        service.executeWhitelistedQuery("recent_analyses", { maliciousParam: "value" })
       ).rejects.toThrow(ApiError);
       
       expect(mockExecuteQuery).not.toHaveBeenCalled();
     });
 
-    it("should reject multiple statements", async () => {
+    it("should reject dangerous characters in string parameters", async () => {
       await expect(
-        service.executeQuery("SELECT * FROM ai_analysis; SELECT * FROM users;")
+        service.executeWhitelistedQuery("search_analyses", { 
+          keywords: "test; DROP TABLE users;--", 
+          limit: 10 
+        })
       ).rejects.toThrow(ApiError);
       
       expect(mockExecuteQuery).not.toHaveBeenCalled();
     });
 
-    it("should reject SQL injection via comments", async () => {
+    it("should reject excessively long string parameters", async () => {
+      const longString = "a".repeat(1001);
       await expect(
-        service.executeQuery("SELECT * FROM ai_analysis -- comment\n; DROP TABLE users;")
+        service.executeWhitelistedQuery("search_analyses", { 
+          keywords: longString, 
+          limit: 10 
+        })
       ).rejects.toThrow(ApiError);
       
       expect(mockExecuteQuery).not.toHaveBeenCalled();
     });
 
-    it("should reject SQL injection via block comments", async () => {
+    it("should reject limits exceeding maximum", async () => {
       await expect(
-        service.executeQuery("SELECT * /* comment */ FROM ai_analysis; DROP TABLE users;")
+        service.executeWhitelistedQuery("recent_analyses", { 
+          userId: "user-1",
+          days: 30,
+          limit: 999999
+        })
       ).rejects.toThrow(ApiError);
       
       expect(mockExecuteQuery).not.toHaveBeenCalled();
     });
 
-    it("should reject INSERT INTO attempts", async () => {
-      await expect(
-        service.executeQuery("SELECT * FROM ai_analysis WHERE 1=1 INSERT INTO users VALUES('evil')")
-      ).rejects.toThrow(ApiError);
-      
-      expect(mockExecuteQuery).not.toHaveBeenCalled();
-    });
-
-    it("should reject GRANT/REVOKE statements", async () => {
-      await expect(
-        service.executeQuery("SELECT * FROM ai_analysis WHERE 1=1 GRANT ALL PRIVILEGES ON users TO hacker")
-      ).rejects.toThrow(ApiError);
-      
-      expect(mockExecuteQuery).not.toHaveBeenCalled();
+    it("should list available whitelisted queries", () => {
+      const queries = service.getAvailableQueries();
+      expect(queries).toContain("recent_analyses");
+      expect(queries).toContain("account_analyses");
+      expect(queries).toContain("search_analyses");
+      expect(queries).toContain("count_user_analyses");
+      expect(queries).toContain("count_account_analyses");
     });
   });
 
-  describe("Query methods", () => {
+  describe("Whitelisted Query methods", () => {
     const mockResults = [
       {
         id: "test-id",
@@ -138,15 +134,24 @@ describe("LLMAnalystQueryService", () => {
       );
     });
 
-    it("should get top insights", async () => {
+    it("should get top insights with mutual exclusion", async () => {
       mockExecuteQuery.mockResolvedValue(mockResults);
       
-      const result = await service.getTopInsights("user-1", "account-1", 10);
+      // Should reject both userId and socialAccountId
+      await expect(
+        service.getTopInsights("user-1", "account-1", 10)
+      ).rejects.toThrow(ApiError);
+    });
+
+    it("should get top insights by user", async () => {
+      mockExecuteQuery.mockResolvedValue(mockResults);
+      
+      const result = await service.getTopInsights("user-1", undefined, 10);
       
       expect(result.success).toBe(true);
       expect(mockExecuteQuery).toHaveBeenCalledWith(
-        expect.stringContaining("ORDER BY score DESC"),
-        ["user-1", "account-1", 10]
+        expect.stringContaining("WHERE user_id = $1"),
+        ["user-1", 10]
       );
     });
 
@@ -169,6 +174,30 @@ describe("LLMAnalystQueryService", () => {
         ["user-1", "30 days"]
       );
     });
+
+    it("should count user analyses", async () => {
+      mockExecuteQuery.mockResolvedValue([{ count: 42 }]);
+      
+      const count = await service.countUserAnalyses("user-1");
+      
+      expect(count).toBe(42);
+      expect(mockExecuteQuery).toHaveBeenCalledWith(
+        expect.stringContaining("SELECT COUNT(*) as count"),
+        ["user-1"]
+      );
+    });
+
+    it("should count account analyses", async () => {
+      mockExecuteQuery.mockResolvedValue([{ count: 15 }]);
+      
+      const count = await service.countAccountAnalyses("account-1");
+      
+      expect(count).toBe(15);
+      expect(mockExecuteQuery).toHaveBeenCalledWith(
+        expect.stringContaining("WHERE social_account_id = $1"),
+        ["account-1"]
+      );
+    });
   });
 
   describe("Error handling", () => {
@@ -180,24 +209,20 @@ describe("LLMAnalystQueryService", () => {
       ).rejects.toThrow(ApiError);
     });
 
-    it("should handle executeAnalystFunction errors gracefully", async () => {
-      const { LLMClientService } = require("../src/services/llm-client.service");
-      const llmClient = new LLMClientService();
+    it("should handle empty count results", async () => {
+      mockExecuteQuery.mockResolvedValue([]);
       
-      // Access private method for testing
-      const executeAnalystFunction = llmClient.executeAnalystFunction.bind(llmClient);
+      const count = await service.countUserAnalyses("user-1");
       
-      const result = await executeAnalystFunction("nonexistentFunction", {});
-      
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(count).toBe(0);
     });
 
-    it("should handle invalid query parameters", async () => {
-      // Test with null parameters
-      await expect(
-        service.executeQuery("SELECT * FROM ai_analysis WHERE user_id = $1", [null])
-      ).rejects.toThrow();
+    it("should handle null count results", async () => {
+      mockExecuteQuery.mockResolvedValue([{ count: null }]);
+      
+      const count = await service.countAccountAnalyses("account-1");
+      
+      expect(count).toBe(0);
     });
   });
 });

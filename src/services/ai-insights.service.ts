@@ -212,12 +212,7 @@ export class AIInsightsService {
   ): Promise<boolean> {
     try {
       // Check for ANY insights for this user (most comprehensive check)
-      const userInsightsResult = await llmAnalystQueryService.executeQuery(
-        "SELECT COUNT(*) as count FROM ai_analysis WHERE user_id = $1",
-        [userId],
-      );
-
-      const userCount = userInsightsResult.data[0]?.count || 0;
+      const userCount = await llmAnalystQueryService.countUserAnalyses(userId);
       if (userCount > 0) {
         logger.info(
           `AI INSIGHTS: Found ${userCount} existing insights for user in database`,
@@ -226,12 +221,7 @@ export class AIInsightsService {
       }
 
       // Check for ANY insights for this specific account
-      const accountInsightsResult = await llmAnalystQueryService.executeQuery(
-        "SELECT COUNT(*) as count FROM ai_analysis WHERE social_account_id = $1",
-        [socialAccountId],
-      );
-
-      const accountCount = accountInsightsResult.data[0]?.count || 0;
+      const accountCount = await llmAnalystQueryService.countAccountAnalyses(socialAccountId);
       if (accountCount > 0) {
         logger.info(
           `AI INSIGHTS: Found ${accountCount} existing insights for account in database`,
