@@ -269,6 +269,7 @@ export class LLMAnalystQueryService {
     queryKey: string,
     params: Record<string, any> = {},
   ): Promise<LLMQueryResult> {
+    let queryStartTime: number | undefined;
     try {
       this.validateQueryParams(queryKey, params);
 
@@ -293,14 +294,21 @@ export class LLMAnalystQueryService {
         paramValues.push(value);
       }
 
+      queryStartTime = Date.now();
       logger.info(
         `LLM ANALYST: Executing whitelisted query '${queryKey}' with ${paramValues.length} parameters`,
       );
 
-      // Use Repository's safer query methods instead of executeQuery
+      // Repository.executeQuery() handles connection management with proper cleanup
+      // in try/finally blocks to prevent connection leaks
       const results = await this.aiAnalysisRepo.executeQuery(
         template,
         paramValues,
+      );
+
+      const queryDuration = queryStartTime ? Date.now() - queryStartTime : 0;
+      logger.info(
+        `LLM ANALYST: Query '${queryKey}' completed successfully in ${queryDuration}ms`,
       );
 
       return {
@@ -311,8 +319,9 @@ export class LLMAnalystQueryService {
         timestamp: new Date(),
       };
     } catch (error) {
+      const queryDuration = queryStartTime ? Date.now() - queryStartTime : 0;
       logger.error(
-        `LLM ANALYST: Whitelisted query '${queryKey}' execution failed:`,
+        `LLM ANALYST: Whitelisted query '${queryKey}' execution failed after ${queryDuration}ms:`,
         error,
       );
 

@@ -1,6 +1,8 @@
 import { logger } from "../logger";
 import { LLM_CONFIG } from "../config/constants";
 import llmAnalystQueryService from "./llm-analyst-query.service";
+import { RetryHandler } from "../utils/retry";
+import { LLMProviderError } from "../utils/errors";
 
 /**
  * Function definition for LLM analyst query tools
@@ -19,6 +21,12 @@ interface LLMFunction {
  * Service responsible only for LLM API interactions
  * Separated from business logic and data processing
  * Now supports function calling for analyst queries
+ *
+ * Features:
+ * - Exponential backoff retry logic for rate limits and transient errors
+ * - Automatic handling of 429 (rate limit) and 5xx server errors
+ * - Respect for Retry-After headers from API providers
+ * - Comprehensive error classification and logging
  */
 export class LLMClientService {
   private readonly requiredApiKeys: Map<string, string>;
@@ -238,93 +246,160 @@ export class LLMClientService {
   }
 
   /**
-   * Call OpenAI API for insight generation
+   * Call OpenAI API for insight generation with rate limiting and retry logic
    */
   private async callOpenAI(
     systemPrompt: string,
     userPrompt: string,
   ): Promise<string> {
-    const apiKey = this.getApiKey("openai");
+    return await RetryHandler.forAIInsights().execute(
+      async () => {
+        const apiKey = this.getApiKey("openai");
 
-    const { OpenAI } = await import("openai");
-    const openai = new OpenAI({
-      apiKey: apiKey,
-    });
+        const { OpenAI } = await import("openai");
+        const openai = new OpenAI({
+          apiKey: apiKey,
+        });
 
-    const model = process.env.OPENAI_MODEL || LLM_CONFIG.DEFAULT_OPENAI_MODEL;
+        const model =
+          process.env.OPENAI_MODEL || LLM_CONFIG.DEFAULT_OPENAI_MODEL;
 
-    const response = await openai.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    });
+        try {
+          const response = await openai.chat.completions.create({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          });
 
-    const content = response.choices[0]?.message?.content;
+          const content = response.choices[0]?.message?.content;
 
-    logger.info(`OPENAI RESPONSE: Full response object:`, {
-      choices: response.choices?.length || 0,
-      model: response.model,
-      usage: response.usage,
-      firstChoiceFinishReason: response.choices[0]?.finish_reason,
-    });
+          logger.info(`OPENAI RESPONSE: Full response object:`, {
+            choices: response.choices?.length || 0,
+            model: response.model,
+            usage: response.usage,
+            firstChoiceFinishReason: response.choices[0]?.finish_reason,
+          });
 
-    if (!content) {
-      logger.error(`OPENAI RESPONSE: Empty content! Full response:`, response);
-      throw new Error("Empty response from OpenAI");
-    }
+          if (!content) {
+            logger.error(
+              `OPENAI RESPONSE: Empty content! Full response:`,
+              response,
+            );
+            throw LLMProviderError.connectionError();
+          }
 
-    logger.info(
-      `OPENAI RESPONSE: Content length: ${content.length} characters`,
+          logger.info(
+            `OPENAI RESPONSE: Content length: ${content.length} characters`,
+          );
+          logger.info(
+            `OPENAI RESPONSE: First 500 characters:`,
+            content.substring(0, 500),
+          );
+          logger.info(
+            `OPENAI RESPONSE: Last 200 characters:`,
+            content.substring(Math.max(0, content.length - 200)),
+          );
+
+          return content;
+        } catch (error: any) {
+          // Handle OpenAI-specific errors and convert to retryable errors
+          if (error?.status === 429) {
+            const retryAfter = error?.headers?.["retry-after"]
+              ? parseInt(error.headers["retry-after"])
+              : undefined;
+            throw LLMProviderError.rateLimited(retryAfter);
+          }
+
+          if (error?.status >= 500) {
+            throw LLMProviderError.connectionError();
+          }
+
+          if (error?.code === "insufficient_quota") {
+            throw LLMProviderError.quotaExceeded();
+          }
+
+          // Re-throw as LLM provider error for proper retry handling
+          throw new LLMProviderError(
+            `OpenAI API error: ${error?.message || "Unknown error"}`,
+            error?.status || 503,
+            true,
+          );
+        }
+      },
+      {},
+      "OpenAI API call",
     );
-    logger.info(
-      `OPENAI RESPONSE: First 500 characters:`,
-      content.substring(0, 500),
-    );
-    logger.info(
-      `OPENAI RESPONSE: Last 200 characters:`,
-      content.substring(Math.max(0, content.length - 200)),
-    );
-
-    return content;
   }
 
   /**
-   * Call Anthropic API for insight generation
+   * Call Anthropic API for insight generation with rate limiting and retry logic
    */
   private async callAnthropic(
     systemPrompt: string,
     userPrompt: string,
   ): Promise<string> {
-    const apiKey = this.getApiKey("anthropic");
+    return await RetryHandler.forAIInsights().execute(
+      async () => {
+        const apiKey = this.getApiKey("anthropic");
 
-    const { Anthropic } = await import("@anthropic-ai/sdk");
-    const anthropic = new Anthropic({
-      apiKey: apiKey,
-    });
+        const { Anthropic } = await import("@anthropic-ai/sdk");
+        const anthropic = new Anthropic({
+          apiKey: apiKey,
+        });
 
-    const model =
-      process.env.ANTHROPIC_MODEL || LLM_CONFIG.DEFAULT_ANTHROPIC_MODEL;
-    const maxTokens = parseInt(
-      process.env.LLM_MAX_TOKENS || LLM_CONFIG.DEFAULT_MAX_TOKENS.toString(),
-      10,
+        const model =
+          process.env.ANTHROPIC_MODEL || LLM_CONFIG.DEFAULT_ANTHROPIC_MODEL;
+        const maxTokens = parseInt(
+          process.env.LLM_MAX_TOKENS ||
+            LLM_CONFIG.DEFAULT_MAX_TOKENS.toString(),
+          10,
+        );
+
+        try {
+          const response = await anthropic.messages.create({
+            model,
+            max_tokens: maxTokens,
+            temperature: LLM_CONFIG.DEFAULT_TEMPERATURE,
+            system: systemPrompt,
+            messages: [{ role: "user", content: userPrompt }],
+          });
+
+          const content = response.content[0];
+          if (!content || content.type !== "text") {
+            throw LLMProviderError.connectionError();
+          }
+
+          return content.text;
+        } catch (error: any) {
+          // Handle Anthropic-specific errors and convert to retryable errors
+          if (error?.status === 429) {
+            const retryAfter = error?.headers?.["retry-after"]
+              ? parseInt(error.headers["retry-after"])
+              : undefined;
+            throw LLMProviderError.rateLimited(retryAfter);
+          }
+
+          if (error?.status >= 500) {
+            throw LLMProviderError.connectionError();
+          }
+
+          if (error?.error?.type === "credit_limit_exceeded") {
+            throw LLMProviderError.quotaExceeded();
+          }
+
+          // Re-throw as LLM provider error for proper retry handling
+          throw new LLMProviderError(
+            `Anthropic API error: ${error?.message || "Unknown error"}`,
+            error?.status || 503,
+            true,
+          );
+        }
+      },
+      {},
+      "Anthropic API call",
     );
-
-    const response = await anthropic.messages.create({
-      model,
-      max_tokens: maxTokens,
-      temperature: LLM_CONFIG.DEFAULT_TEMPERATURE,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    });
-
-    const content = response.content[0];
-    if (!content || content.type !== "text") {
-      throw new Error("Invalid response from Anthropic");
-    }
-
-    return content.text;
   }
 
   /**
@@ -366,12 +441,43 @@ export class LLMClientService {
     let iteration = 0;
 
     while (iteration < maxIterations) {
-      const response = await openai.chat.completions.create({
-        model,
-        messages,
-        tools,
-        tool_choice: "auto",
-      });
+      const response = await RetryHandler.forAIInsights().execute(
+        async () => {
+          try {
+            return await openai.chat.completions.create({
+              model,
+              messages,
+              tools,
+              tool_choice: "auto",
+            });
+          } catch (error: any) {
+            // Handle OpenAI-specific errors and convert to retryable errors
+            if (error?.status === 429) {
+              const retryAfter = error?.headers?.["retry-after"]
+                ? parseInt(error.headers["retry-after"])
+                : undefined;
+              throw LLMProviderError.rateLimited(retryAfter);
+            }
+
+            if (error?.status >= 500) {
+              throw LLMProviderError.connectionError();
+            }
+
+            if (error?.code === "insufficient_quota") {
+              throw LLMProviderError.quotaExceeded();
+            }
+
+            // Re-throw as LLM provider error for proper retry handling
+            throw new LLMProviderError(
+              `OpenAI function call error: ${error?.message || "Unknown error"}`,
+              error?.status || 503,
+              true,
+            );
+          }
+        },
+        {},
+        `OpenAI function call (iteration ${iteration + 1})`,
+      );
 
       const choice = response.choices[0];
       if (!choice?.message) {
@@ -485,14 +591,45 @@ export class LLMClientService {
     let iteration = 0;
 
     while (iteration < maxIterations) {
-      const response = await anthropic.messages.create({
-        model,
-        max_tokens: maxTokens,
-        temperature: LLM_CONFIG.DEFAULT_TEMPERATURE,
-        system: systemPrompt,
-        messages,
-        tools,
-      });
+      const response = await RetryHandler.forAIInsights().execute(
+        async () => {
+          try {
+            return await anthropic.messages.create({
+              model,
+              max_tokens: maxTokens,
+              temperature: LLM_CONFIG.DEFAULT_TEMPERATURE,
+              system: systemPrompt,
+              messages,
+              tools,
+            });
+          } catch (error: any) {
+            // Handle Anthropic-specific errors and convert to retryable errors
+            if (error?.status === 429) {
+              const retryAfter = error?.headers?.["retry-after"]
+                ? parseInt(error.headers["retry-after"])
+                : undefined;
+              throw LLMProviderError.rateLimited(retryAfter);
+            }
+
+            if (error?.status >= 500) {
+              throw LLMProviderError.connectionError();
+            }
+
+            if (error?.error?.type === "credit_limit_exceeded") {
+              throw LLMProviderError.quotaExceeded();
+            }
+
+            // Re-throw as LLM provider error for proper retry handling
+            throw new LLMProviderError(
+              `Anthropic function call error: ${error?.message || "Unknown error"}`,
+              error?.status || 503,
+              true,
+            );
+          }
+        },
+        {},
+        `Anthropic function call (iteration ${iteration + 1})`,
+      );
 
       const content = response.content;
       if (!content || content.length === 0) {

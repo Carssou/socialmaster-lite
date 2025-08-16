@@ -3,7 +3,7 @@ import { HandThumbUpIcon, HandThumbDownIcon } from '@heroicons/react/24/outline'
 
 interface FeedbackButtonsProps {
   rating: boolean | null;
-  onRating: (rating: boolean) => void;
+  onRating: (userRating: boolean) => void;
   disabled?: boolean;
 }
 

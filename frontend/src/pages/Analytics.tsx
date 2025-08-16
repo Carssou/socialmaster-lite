@@ -554,7 +554,7 @@ export const Analytics: React.FC = () => {
                                         </span>
                                         <FeedbackButtons
                                           rating={insight.userRating ?? null}
-                                          onRating={(rating) => handleInsightRating(insight.id, rating)}
+                                          onRating={(userRating) => handleInsightRating(insight.id, userRating)}
                                         />
                                       </div>
                                       <span>
@@ -766,7 +766,7 @@ export const Analytics: React.FC = () => {
                                       </span>
                                       <FeedbackButtons
                                         rating={insight.userRating ?? null}
-                                        onRating={(rating) => handleInsightRating(insight.id, rating)}
+                                        onRating={(userRating) => handleInsightRating(insight.id, userRating)}
                                       />
                                     </div>
                                     <span>

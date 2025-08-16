@@ -9,6 +9,7 @@ import apifyService, {
 import aiInsightsService from "../services/ai-insights.service";
 import { ApiError } from "../utils/errors";
 import { logger } from "../logger";
+import { TIME_INTERVALS } from "../config/constants";
 
 const router = Router();
 
@@ -256,9 +257,11 @@ router.get(
           arr.findIndex((i) => i.id === insight.id) === index,
       );
 
-      // Find insights created within the last 7 days (for "new" marking in UI)
+      // Find insights created within the configurable threshold (for "new" marking in UI)
       const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const newInsightThresholdMs =
+        TIME_INTERVALS.NEW_INSIGHT_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+      const thresholdDate = new Date(now.getTime() - newInsightThresholdMs);
 
       // Sort by creation date (newest first)
       const insights = uniqueInsights.sort(
@@ -281,17 +284,17 @@ router.get(
             confidence: insight.confidence / 100, // Convert to decimal for frontend
             priority: insight.impact,
             createdAt: insight.created_at,
-            isNew: new Date(insight.created_at) >= sevenDaysAgo, // Mark insights from last 7 days as "new"
+            isNew: new Date(insight.created_at) >= thresholdDate, // Mark recent insights as "new" based on configurable threshold
             userRating: insight.user_rating,
           })),
           summary: {
             totalMetrics: basicMetrics.length,
             totalInsights: insights.length,
             newInsights: insights.filter(
-              (i) => new Date(i.created_at) >= sevenDaysAgo,
+              (i) => new Date(i.created_at) >= thresholdDate,
             ).length,
             previousInsights: insights.filter(
-              (i) => new Date(i.created_at) < sevenDaysAgo,
+              (i) => new Date(i.created_at) < thresholdDate,
             ).length,
             lastUpdated: posts[0]!.last_updated_at,
             dataSource: "apify_posts",
@@ -415,7 +418,7 @@ router.get(
         `Getting AI insights for account: ${accountId}, forceRefresh: ${forceRefresh}`,
       );
 
-      // Get insights (uses 7-day cache for automatic, 2-day cache for user-requested)
+      // Get insights (uses configurable cache periods from TIME_INTERVALS)
       let insights: any[] = [];
       try {
         insights = await aiInsightsService.generateAccountInsights(

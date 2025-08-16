@@ -69,7 +69,7 @@ export class AIInsightsService {
       let recentInsights: AIAnalysisDB[] = [];
 
       if (forceRefresh) {
-        // For user-requested insights, check 2-day threshold
+        // For user-requested insights, check configurable threshold
         recentInsights =
           await this.dataService.getRecentInsightsForUserRequest(
             socialAccountId,
@@ -83,10 +83,10 @@ export class AIInsightsService {
         }
 
         logger.info(
-          "AI INSIGHTS: No recent user-requested insights found (2-day check), generating new ones...",
+          `AI INSIGHTS: No recent user-requested insights found (${TIME_INTERVALS.AI_INSIGHTS_USER_REQUEST_CACHE_HOURS}h threshold), generating new ones...`,
         );
       } else {
-        // For automatic insights, check 7-day threshold
+        // For automatic insights, check configurable threshold
         recentInsights =
           await this.dataService.getRecentInsights(socialAccountId);
 

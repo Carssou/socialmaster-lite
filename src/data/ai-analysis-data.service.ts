@@ -144,4 +144,50 @@ export class AIAnalysisDataService {
       [username],
     );
   }
+
+  /**
+   * Update user rating for an insight
+   * Optimized with composite indexes: idx_ai_analysis_user_id_composite and idx_ai_analysis_rating_queries
+   */
+  async updateInsightRating(
+    insightId: string,
+    userId: string,
+    rating: boolean,
+  ): Promise<void> {
+    await this.aiAnalysisRepo.executeQuery(
+      `UPDATE ai_analysis 
+       SET user_rating = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $2 AND user_id = $3`,
+      [rating, insightId, userId],
+    );
+  }
+
+  /**
+   * Get insights with user ratings for a specific user
+   * Utilizes idx_ai_analysis_rating_queries for efficient filtering
+   */
+  async getUserInsightsWithRatings(
+    userId: string,
+    ratingFilter?: boolean,
+    limit: number = 50,
+  ): Promise<AIAnalysisDB[]> {
+    const whereClause =
+      ratingFilter !== undefined
+        ? "WHERE user_id = $1 AND user_rating = $2 AND is_active = true"
+        : "WHERE user_id = $1 AND user_rating IS NOT NULL AND is_active = true";
+
+    const params =
+      ratingFilter !== undefined
+        ? [userId, ratingFilter, limit]
+        : [userId, limit];
+    const limitIndex = ratingFilter !== undefined ? "$3" : "$2";
+
+    return (await this.aiAnalysisRepo.executeQuery(
+      `SELECT * FROM ai_analysis 
+       ${whereClause}
+       ORDER BY updated_at DESC, score DESC 
+       LIMIT ${limitIndex}`,
+      params,
+    )) as AIAnalysisDB[];
+  }
 }
