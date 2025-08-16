@@ -1,0 +1,110 @@
+@theme {
+  /* Font Family */
+  --font-sans: 'Inter', 'system-ui', 'sans-serif';
+
+  /* Primary Colors (Stripe-inspired) */
+  --color-primary-50: #f0f0ff;
+  --color-primary-100: #e5e5ff;
+  --color-primary-200: #cfcfff;
+  --color-primary-300: #a8a8ff;
+  --color-primary-400: #7a7aff;
+  --color-primary-500: #635BFF; /* Main brand color */
+  --color-primary-600: #5347e6;
+  --color-primary-700: #473dcc;
+  --color-primary-800: #3c35a3;
+  --color-primary-900: #342f82;
+
+  /* Coral Colors (Airbnb accent) */
+  --color-coral-50: #fff5f5;
+  --color-coral-100: #ffe3e3;
+  --color-coral-200: #ffcccc;
+  --color-coral-300: #ffa8a8;
+  --color-coral-400: #ff7575;
+  --color-coral-500: #FF5A5F; /* Airbnb coral */
+  --color-coral-600: #e6474c;
+  --color-coral-700: #cc383d;
+  --color-coral-800: #a62d32;
+  --color-coral-900: #8a262a;
+
+  /* Gray Scale (Modern) */
+  --color-gray-50: #f8fafc;
+  --color-gray-100: #f1f5f9;
+  --color-gray-200: #e2e8f0;
+  --color-gray-300: #cbd5e1;
+  --color-gray-400: #94a3b8;
+  --color-gray-500: #64748b;
+  --color-gray-600: #475569;
+  --color-gray-700: #334155;
+  --color-gray-800: #1e293b;
+  --color-gray-900: #0f172a;
+
+  /* Success Colors */
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-200: #bbf7d0;
+  --color-success-300: #86efac;
+  --color-success-400: #4ade80;
+  --color-success-500: #00D924;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+  --color-success-900: #14532d;
+
+  /* Warning Colors */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
+  --color-warning-300: #fcd34d;
+  --color-warning-400: #fbbf24;
+  --color-warning-500: #FFB800;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+  --color-warning-900: #78350f;
+
+  /* Error Colors */
+  --color-error-50: #fef2f2;
+  --color-error-100: #fee2e2;
+  --color-error-200: #fecaca;
+  --color-error-300: #fca5a5;
+  --color-error-400: #f87171;
+  --color-error-500: #FF4444;
+  --color-error-600: #dc2626;
+  --color-error-700: #b91c1c;
+  --color-error-800: #991b1b;
+  --color-error-900: #7f1d1d;
+
+  /* Custom shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  /* Custom spacing */
+  --spacing-18: 4.5rem;     /* 72px */
+  --spacing-88: 22rem;      /* 352px */
+  --spacing-128: 32rem;     /* 512px */
+
+  /* Custom border radius */
+  --radius-xl: 0.75rem;     /* 12px */
+  --radius-2xl: 1rem;       /* 16px */
+  --radius-3xl: 1.5rem;     /* 24px */
+
+  /* Animations */
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes slideDown {
+    0% { transform: translateY(-10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  --animate-fade-in: fadeIn 0.2s ease-in-out;
+  --animate-slide-up: slideUp 0.3s ease-out;
+  --animate-slide-down: slideDown 0.3s ease-out;
+}

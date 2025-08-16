@@ -1,1 +1,43 @@
 @import "tailwindcss";
+
+/* Brand Colors as CSS Custom Properties */
+:root {
+  --color-primary-50: #f0f0ff;
+  --color-primary-100: #e5e5ff;
+  --color-primary-200: #cfcfff;
+  --color-primary-300: #a8a8ff;
+  --color-primary-400: #7a7aff;
+  --color-primary-500: #635BFF; /* Main brand color */
+  --color-primary-600: #5347e6;
+  --color-primary-700: #473dcc;
+  --color-primary-800: #3c35a3;
+  --color-primary-900: #342f82;
+
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-500: #00D924;
+  --color-success-700: #15803d;
+
+  --color-error-500: #FF4444;
+  --color-error-600: #dc2626;
+}
+
+/* Apply brand colors to components */
+.bg-primary-50 { background-color: var(--color-primary-50) !important; }
+.bg-primary-100 { background-color: var(--color-primary-100) !important; }
+.bg-primary-500 { background-color: var(--color-primary-500) !important; }
+.text-primary-500 { color: var(--color-primary-500) !important; }
+.text-primary-700 { color: var(--color-primary-700) !important; }
+.text-white { color: white !important; }
+.border-primary-500 { border-color: var(--color-primary-500) !important; }
+
+/* Active navigation state */
+.nav-active {
+  background-color: var(--color-primary-50) !important;
+  color: var(--color-primary-700) !important;
+  border-left: 4px solid var(--color-primary-500) !important;
+}
+
+.nav-active .icon {
+  color: var(--color-primary-500) !important;
+}
